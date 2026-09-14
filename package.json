@@ -1,0 +1,14 @@
+{
+  "name": "teambrain",
+  "version": "0.2.0-preview",
+  "description": "Local-first, Git-backed team memory",
+  "type": "commonjs",
+  "bin": { "teambrain": "bin/teambrain.js" },
+  "scripts": {
+    "test": "node --experimental-sqlite --test test/**/*.test.js",
+    "start": "node --experimental-sqlite bin/teambrain.js dashboard --root ./data",
+    "cli": "node --experimental-sqlite bin/teambrain.js"
+  },
+  "engines": { "node": ">=22.5.0" },
+  "license": "Apache-2.0"
+}

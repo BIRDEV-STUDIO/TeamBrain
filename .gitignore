@@ -1,0 +1,8 @@
+node_modules/
+.teambrain/index.sqlite*
+.teambrain/*.log
+.teambrain/views/
+coverage/
+data/
+work/
+outputs/

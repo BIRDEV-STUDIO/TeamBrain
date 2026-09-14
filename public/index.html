@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TeamBrain · Ekip hafızası</title>
+  <link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a href="/" class="brand"><span class="brand-icon">✳</span> teambrain<span class="brand-dot">.</span></a>
+    <div class="workspace-label">ÇALIŞMA ALANIN</div>
+    <label class="sr-only" for="team">Ekip seç</label><select id="team"></select>
+    <button class="quiet sidebar-add" id="add-team">＋ Yeni ekip oluştur</button>
+    <nav id="nav" aria-label="Ana menü">
+      <button data-view="overview" class="active"><span>◈</span> Genel bakış</button>
+      <button data-view="activity"><span>≋</span> Aktivite</button>
+      <button data-view="decisions"><span>◇</span> Karar defteri</button>
+      <button data-view="daily"><span>◷</span> Günün özeti</button>
+      <button data-view="integrations"><span>⌘</span> Bağlantılar</button>
+    </nav>
+    <div class="project-label"><span>PROJELER</span><button id="add-project" aria-label="Yeni proje">＋</button></div>
+    <div id="projects" class="projects"></div>
+    <div class="sidebar-bottom"><span class="status-dot"></span><div>Bu bilgisayarda çalışıyor<small>Hafızan, senin kontrolünde.</small></div></div>
+  </aside>
+  <div class="shell">
+    <header class="topbar"><div id="breadcrumb">Çalışma alanı</div><div class="top-actions"><span class="local-badge">● Yerel çalışma</span><button class="avatar" id="profile" title="Yerel kullanıcı">E</button></div></header>
+    <main>
+      <div class="page-heading"><div><div class="eyebrow" id="date"></div><h1 id="heading">Ekibinin ortak hafızası.</h1><p id="subtitle">Kararlar, çalışmalar ve onları birbirine bağlayan nedenler.</p></div><button class="primary" id="new-event">＋ Yeni kayıt</button></div>
+      <section id="hero" class="hero"><div><span class="eyebrow">BİRLİKTE ÜRET. BAĞLAMI KORU.</span><h2>İyi fikirler kaybolmasın.</h2><p>Ne yaptığınızı, neden yaptığınızı ve sırada ne olduğunu<br>aynı yerden takip edin.</p><button id="hero-action" class="hero-button">İlk projeni oluştur <span>↗</span></button></div><div class="orbit-art" aria-hidden="true"><div class="orbit o1"></div><div class="orbit o2"></div><div class="orbit o3"></div><span class="orbit-center">✳</span><span class="orbit-tag tag1">fikir</span><span class="orbit-tag tag2">karar</span><span class="orbit-tag tag3">bağlam</span></div></section>
+      <section id="metrics" class="metrics"></section>
+      <div id="content"></div>
+    </main>
+    <footer>TEAM BRAIN, CLEAR MIND.<span>Yerel önizleme · 0.2</span></footer>
+  </div>
+  <dialog id="editor"><form id="editor-form"><div class="dialog-heading"><div><span class="eyebrow">TEAM BRAIN</span><h2 id="editor-title"></h2></div><button type="button" class="icon-button" id="close-editor" aria-label="Kapat">×</button></div><div id="fields"></div><p id="form-error" role="alert"></p><div class="dialog-footer"><button type="button" class="secondary" id="cancel">Vazgeç</button><button class="primary" id="save">Oluştur</button></div></form></dialog>
+  <dialog id="detail"><div class="dialog-heading"><h2>Kayıt detayı</h2><button class="icon-button" id="close-detail" aria-label="Detayı kapat">×</button></div><div id="detail-content"></div></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body></html>

@@ -48,13 +48,9 @@ Creation writes the canonical file first with exclusive-create semantics, then i
 
 Daily summaries are generated views derived from event documents and may be regenerated, deleted, or personalized. They are never canonical events unless a human deliberately records a separate decision/event.
 
-## Chat
-
-The dashboard chat is project-scoped and local-first. A user message is persisted as `chat.message`; TeamBrain's current local assistant reply is persisted as `chat.reply.generated` with `causation_id` pointing to the message that caused it. The first assistant implementation searches the local SQLite projection and cites matching or recent project records. It is deliberately not a remote AI integration yet. Future Codex, Claude or Ollama providers should implement the adapter contract and keep the same event boundary: private provider context can help generate a reply, but the canonical shared memory remains the explicit event document.
-
 ## Dashboard and deployment
 
-The preview uses dependency-free HTML/CSS/JavaScript served by the node at `127.0.0.1:7340`. A hosted static frontend alone cannot access the local filesystem or SQLite. Hosting, accounts and relays remain separate future decisions, not prerequisites for the working local app. A desktop wrapper can reuse this API later; no desktop binary is shipped yet. The dashboard displays the latest 1,000 indexed events, with total count reported separately; text search, chat context and daily views operate on that loaded/indexed memory.
+The preview uses dependency-free HTML/CSS/JavaScript served by the node at `127.0.0.1:7340`. A hosted static frontend alone cannot access the local filesystem or SQLite. Hosting, accounts and relays remain separate future decisions, not prerequisites for the working local app. A desktop wrapper can reuse this API later; no desktop binary is shipped yet. The dashboard displays the latest 1,000 indexed events, with total count reported separately; text search and daily views operate on that loaded window.
 
 ## Scope and security
 

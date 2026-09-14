@@ -2,14 +2,6 @@
 
 All notable changes are documented here.
 
-## 0.3.0-preview — 2026-09-14
-
-- Added a project-scoped chat screen to the dashboard.
-- Persisted chat messages and local assistant replies as canonical immutable events.
-- Added a local-first chat API endpoint for selected team/project memory.
-- Added tests for chat persistence, causal links and project isolation.
-- Documented the current local chat engine and future AI-provider boundary.
-
 ## 0.2.0-preview — 2026-09-14
 
 - New responsive workspace dashboard and team/project creation through the UI.

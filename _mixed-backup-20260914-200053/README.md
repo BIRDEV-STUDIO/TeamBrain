@@ -4,14 +4,7 @@ A local workspace for team knowledge, project activity and decision history. Thi
 
 ## Start on Windows
 
-Install Node.js 22.18 or newer, then prepare the project once:
-
-```powershell
-cd C:\TeamBrain
-npm install
-```
-
-The app intentionally has no runtime npm packages yet; it uses Node's built-in SQLite support. `npm install` creates the lockfile and verifies the package setup for GitHub and other machines.
+Install Node.js 22.18 or newer. No npm dependencies are required for the application.
 
 Double-click **Start-TeamBrain.cmd**, or run:
 
@@ -24,10 +17,9 @@ Open **http://127.0.0.1:7340**. Keep the terminal running. The older demo on por
 
 1. Select **Yeni ekip oluştur** and give your team a name.
 2. Press **+** beside **Projeler** to add a project.
-3. Open **Sohbet** to talk with the selected project's local memory. Every message and generated local reply is saved as immutable project history.
-4. Select **Yeni kayıt** to record a note, issue, decision or change.
-5. Switch teams and projects from the sidebar. Each project has its own history.
-6. Open **Aktivite** to search, **Karar defteri** for decisions and a record for its linked history.
+3. Select **Yeni kayıt** to record a note, issue, decision or change.
+4. Switch teams and projects from the sidebar. Each project has its own history.
+5. Open **Aktivite** to search, **Karar defteri** for decisions and a record for its linked history.
 
 The application starts empty. It does not invent teammates, tasks or AI-generated insights. Your data stays in `data/`, separate from source code and excluded from Git.
 
@@ -64,7 +56,7 @@ npm test
 
 ## Implemented and pending
 
-Implemented: multi-team/multi-project workspace UI, project-isolated event creation, local project chat persisted as canonical events, activity filtering, causal detail view, deterministic daily view, SQLite rebuild, JSON API, explicit CLI Git status/pull/push.
+Implemented: multi-team/multi-project workspace UI, project-isolated event creation, activity filtering, causal detail view, deterministic daily view, SQLite rebuild, JSON API, explicit CLI Git status/pull/push.
 
 Pending: automatic Git synchronization and conflict handling, invitations and membership authorization, live AI/MCP connections, verified Avenox imports, native desktop packaging. The Serena/Avenox modules are data conversion helpers only. Git operations require a separately configured project memory repository and Git credentials. The dashboard reports these limitations explicitly.
 

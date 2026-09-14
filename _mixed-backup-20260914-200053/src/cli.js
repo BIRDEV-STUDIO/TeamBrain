@@ -1,0 +1,36 @@
+'use strict';
+const path = require('node:path'); const fs = require('node:fs');
+const { init, load } = require('./config'); const { createEvent } = require('./event'); const { writeEvent, readEvent, listEventFiles } = require('./store'); const { openIndex, indexEvent, timeline, why, eventChain, clearIndex } = require('./index'); const { MemorySync } = require('./git-sync');
+const { dailySummary, writeDailyView } = require('./views');
+const { validId, listTeams, teamRoot, registerTeam } = require('./teams');
+function parse(args) { const options = {}; const positional = []; for (let i=0;i<args.length;i++) { if (args[i].startsWith('--')) options[args[i].slice(2)] = args[++i]; else positional.push(args[i]); } return { positional, options }; }
+function root(options) { return path.resolve(options.root || process.cwd()); }
+function print(rows) { console.log(JSON.stringify(rows, null, 2)); }
+async function run(args) {
+  const { positional: p, options } = parse(args); const command = p.join(' '); const workspace = root(options);
+  if (command === 'dashboard' || command === 'serve') {
+    const { createDashboardServer } = require('./dashboard-server');
+    const port = Number(options.port || 7340);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid port');
+    const server = createDashboardServer(workspace);
+    await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
+    console.log(`TeamBrain: http://127.0.0.1:${port} | Workspace: ${workspace}`);
+    return;
+  }
+  if (command === 'team list') { print(listTeams(workspace)); return; }
+  if (command === 'team create') { const id = validId(options.id); if (!options.name) throw new Error('team create requires --name'); const team = { team_id: id, name: options.name, created_at: new Date().toISOString() }; const cwd = teamRoot(workspace, id); init(cwd, { projectId: options.project, actorId: options.actor, deviceId: options.device, teamId: id, teamName: options.name }); registerTeam(workspace, team); print({ team, root: cwd }); return; }
+  const cwd = options.team ? teamRoot(workspace, options.team) : workspace;
+  if (command === 'init') { print(init(cwd, { projectId: options.project, actorId: options.actor, deviceId: options.device })); return; }
+  const config = load(cwd); const db = openIndex(cwd);
+  if (command === 'status') { const count = db.prepare('SELECT count(*) AS count FROM events').get().count; print({ initialized: true, root: cwd, team_id: config.team_id, team_name: config.team_name, project_id: config.project_id, events: count, sync: config.sync, relay: config.relay }); return; }
+  if (command === 'event create') { if (!options.type || !options.title) throw new Error('event create requires --type and --title'); const event = createEvent({ eventType: options.type, title: options.title, body: options.body, actorId: options.actor, source: options.source, repo: options.repo, branch: options.branch, commit: options.commit, relatedEvents: options['related-events'] ? options['related-events'].split(',') : [], relatedDecisions: options['related-decisions'] ? options['related-decisions'].split(',') : [], correlationId: options.correlation, causationId: options.causation }, config); const file = writeEvent(cwd, event); indexEvent(db, event, file); print({ event, file }); return; }
+  if (command === 'timeline') { print(timeline(db, Number(options.limit || 50))); return; }
+  if (command === 'why') { if (options.event) { print(eventChain(db, options.event)); return; } if (!options.query) throw new Error('why requires --query or --event'); print(why(db, options.query)); return; }
+  if (command === 'daily generate') { const date = options.date || new Date().toISOString().slice(0, 10); const file = writeDailyView(cwd, date, dailySummary(db, date)); print({ generated: true, canonical: false, file }); return; }
+  if (command === 'reindex') { clearIndex(db); let indexed = 0; const invalid = []; for (const file of listEventFiles(cwd)) { try { indexEvent(db, readEvent(file), file); indexed++; } catch (error) { invalid.push({ file, error: error.message }); } } print({ indexed, invalid }); if (invalid.length) process.exitCode = 2; return; }
+  if (command === 'sync status') { print(await new MemorySync(cwd).status()); return; }
+  if (command === 'sync pull') { print(await new MemorySync(cwd).pull()); return; }
+  if (command === 'sync push') { print(await new MemorySync(cwd).push()); return; }
+  throw new Error('commands: init, team create|list, status, event create, timeline, why, daily generate, reindex, sync status|pull|push, serve');
+}
+module.exports = { run };

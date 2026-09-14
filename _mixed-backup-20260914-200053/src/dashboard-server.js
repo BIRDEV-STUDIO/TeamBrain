@@ -44,7 +44,6 @@ function createDashboardServer(root) {
         if (!project && req.method === 'POST') { send(201, workspace.createProject(team, (await jsonBody(req)).name)); return; }
         if (project && !operation && req.method === 'GET') { send(200, workspace.snapshot(team, project)); return; }
         if (project && operation === 'events' && req.method === 'POST') { send(201, workspace.addEvent(team, project, await jsonBody(req))); return; }
-        if (project && operation === 'chat' && req.method === 'POST') { send(201, workspace.chat(team, project, await jsonBody(req))); return; }
         if (project && operation === 'chain' && req.method === 'GET') { send(200, workspace.chain(team, project, url.searchParams.get('event'))); return; }
         if (project && operation === 'reindex' && req.method === 'POST') { await jsonBody(req); send(200, workspace.reindex(team, project)); return; }
       }

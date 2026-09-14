@@ -25,23 +25,6 @@ test('project isolation, causal reference validation and transactional rebuild',
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test('workspace chat persists messages as project-scoped canonical events', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-chat-'));
-  try {
-    const w = new Workspace(root), team = w.createTeam('Studio');
-    const robot = w.createProject(team.id, 'Robot'), web = w.createProject(team.id, 'Web');
-    w.addEvent(team.id, robot.id, { title: 'Use Git memory', body: 'Git keeps the canonical project history.', event_type: 'decision.accepted' });
-    const chat = w.chat(team.id, robot.id, { message: 'Git memory kararini hatirlat' });
-    assert.equal(chat.user.event_type, 'chat.message');
-    assert.equal(chat.reply.event_type, 'chat.reply.generated');
-    assert.equal(chat.reply.causation_id, chat.user.event_id);
-    assert.match(chat.reply.body, /Use Git memory|son bağlam|yerel kayıt/i);
-    assert.equal(w.snapshot(team.id, robot.id).events.filter(e => e.event_type.startsWith('chat.')).length, 2);
-    assert.equal(w.snapshot(team.id, web.id).events.length, 0);
-    assert.throws(() => w.chat(team.id, robot.id, { message: ' ' }));
-  } finally { fs.rmSync(root, { recursive: true, force: true }); }
-});
-
 test('dashboard HTTP onboarding, input checks, security headers and cross-origin protection', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-http-'));
   const server = createDashboardServer(root);
@@ -63,11 +46,8 @@ test('dashboard HTTP onboarding, input checks, security headers and cross-origin
     const url = `/api/teams/${team.id}/projects/${project.id}`;
     assert.equal((await post(url + '/events', { event_type: 'note.created', title: { bad: true } })).status, 400);
     assert.equal((await post(url + '/events', { event_type: 'note.created', title: '<script>alert(1)</script>' })).status, 201);
-    const chat = await post(url + '/chat', { message: 'Bu projede ne var?' });
-    assert.equal(chat.status, 201);
-    assert.equal((await post(url + '/chat', { message: '' })).status, 400);
     const snapshot = await (await fetch(base + url)).json();
-    assert.equal(snapshot.total, 3);
+    assert.equal(snapshot.total, 1);
     assert.equal((await post(url + '/reindex', {})).status, 200);
     assert.equal((await post('/api/teams', { name: 'a'.repeat(70000) })).status, 400);
   } finally { await new Promise(resolve => server.close(resolve)); fs.rmSync(root, { recursive: true, force: true }); }

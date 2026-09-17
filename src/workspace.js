@@ -79,7 +79,7 @@ class Workspace {
       actor: config.actor_id,
       events: timeline(db, 1000),
       total: db.prepare('SELECT count(*) AS total FROM events').get().total,
-      sync: 'manual', integrations: 'local', connection: this.connection(root), planner: planner(this.projectPath(team, project))
+      sync: this.connection(root).github?.sync || 'manual', integrations: 'local', connection: this.connection(root), planner: planner(this.projectPath(team, project))
     }));
   }
   connection(root) {

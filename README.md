@@ -68,7 +68,7 @@ node bin/teambrain.js handoff --root C:\TeamBrain --summary "Review the pending 
 node bin/teambrain.js update --check
 ```
 
-`publish` writes one personal-data-reviewed receipt to `shared/90-receipts/pending/`. A human review must promote it to a canonical decision, project, or knowledge record. Raw conversations are never a publish input. `sync` deliberately reports the explicit pull/push steps; background synchronization and conflict resolution are not silently enabled.
+`publish` writes one personal-data-reviewed receipt to `shared/90-receipts/pending/`. A human review must promote it to a canonical decision, project, or knowledge record. Raw conversations are never a publish input. During connection setup the user chooses manual or background synchronization; background mode is restricted to the selected memory repository's `shared/` and `teams/` records and pauses on conflicts.
 
 ### Team onboarding
 
@@ -79,7 +79,7 @@ gh auth login
 node C:\TeamBrain\bin\teambrain.js connect github --url https://github.com/YOUR-ORG/YOUR-MEMORY-REPO.git --memory-root C:\TeamBrain-memory --actor YOUR_GITHUB_LOGIN
 ```
 
-The `actor` value is the stable member identity in receipts and handoffs; never use a shared account or email address. The command clones the repository, verifies the GitHub URL, creates the shared layout, records a local connection file, and leaves Git network actions explicit. Team members work on personal branches and open pull requests into `main`. GitHub is the central review/distribution layer; TeamBrain itself does not host or see the team's private memory.
+The `actor` value is the stable member identity in receipts and handoffs; never use a shared account or email address. The command clones the repository, verifies the GitHub URL, creates the shared layout, records a local connection file, and asks whether automatic sync is allowed. Team members can work on personal branches and open pull requests into `main`; automatic mode is intended for teams that explicitly accept direct synchronization. GitHub is the central review/distribution layer; TeamBrain itself does not host or see the team's private memory.
 
 `github create-memory` is the one-command version: it uses the user's existing `gh auth login` session, creates the repository under the selected account or organization, then connects it locally. Private visibility is the default.
 
@@ -95,9 +95,9 @@ npm test
 
 ## Implemented and pending
 
-Implemented: multi-team/multi-project workspace UI, project-isolated event creation, local project chat persisted as canonical events, activity filtering, causal detail view, deterministic daily view, SQLite rebuild, JSON API, explicit CLI Git status/pull/push.
+Implemented: multi-team/multi-project workspace UI, project-isolated event creation, local project chat persisted as canonical events, activity filtering, causal detail view, deterministic daily view, SQLite rebuild, JSON API, GitHub memory connection, opt-in background sync, and conflict pause state.
 
-Pending: automatic Git synchronization and conflict handling, invitations and membership authorization, live AI/MCP connections, verified Avenox imports, native desktop packaging. The Serena/Avenox modules are data conversion helpers only. Git operations require a separately configured project memory repository and Git credentials. The dashboard reports these limitations explicitly.
+Pending: GitHub invitation automation and membership authorization, live AI/MCP chat providers, verified Avenox imports, native desktop packaging, and a richer conflict-resolution UI. The dashboard reports these limitations explicitly.
 
 ## Security and contribution
 

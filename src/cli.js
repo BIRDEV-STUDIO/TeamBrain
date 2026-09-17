@@ -14,8 +14,8 @@ async function run(args) {
   if (command === 'context') { const allowed=['00-charter','10-decisions','20-projects','30-knowledge']; const files=[]; for(const dir of allowed){const base=path.join(workspace,'shared',dir); if(fs.existsSync(base)) for(const f of fs.readdirSync(base,{withFileTypes:true})) if(f.isFile()) files.push(path.join('shared',dir,f.name));} print({source:'approved TeamBrain records only',files}); return; }
   if (command === 'publish') { print(protocol.publish(workspace, options)); return; }
   if (command === 'handoff') { print(protocol.handoff(workspace, options)); return; }
-  if (command === 'connect github') { print(protocol.connectGithub(options.url, options['memory-root'] || options.destination, options.actor)); return; }
-  if (command === 'github create-memory') { print(protocol.createGithubMemory(options.owner, options.name, options.visibility || 'private', options['memory-root'] || options.destination, options.actor)); return; }
+  if (command === 'connect github') { print(await protocol.connectGithub(options.url, options['memory-root'] || options.destination, options.actor, options['auto-sync'])); return; }
+  if (command === 'github create-memory') { print(await protocol.createGithubMemory(options.owner, options.name, options.visibility || 'private', options['memory-root'] || options.destination, options.actor, options['auto-sync'])); return; }
   if (command === 'update' && options.check === true) { print({update_check:true,current_version:require('../package.json').version,avenox_target:'3.0.2',message:'No package is downloaded. Review release notes and checksum before updating.'}); return; }
   if (command === 'sync') { print({mode:'explicit', next_steps:['teambrain sync pull','teambrain sync push'], message:'Git is the review/history layer; no background sync or automatic conflict resolution is enabled.'}); return; }
   if (command === 'dashboard' || command === 'serve') {

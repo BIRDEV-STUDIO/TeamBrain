@@ -3,6 +3,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { Workspace } = require('./workspace');
+const { SyncWorker } = require('./sync-worker');
 const assets = { '/': ['index.html', 'text/html'], '/app.css': ['app.css', 'text/css'], '/app.js': ['app.js', 'text/javascript'] };
 
 function guard(req) {
@@ -21,7 +22,8 @@ async function jsonBody(req) {
 }
 function createDashboardServer(root) {
   const workspace = new Workspace(root);
-  return http.createServer(async (req, res) => {
+  const syncWorker=new SyncWorker(root); syncWorker.start();
+  const server=http.createServer(async (req, res) => {
     const send = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); };
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -53,6 +55,6 @@ function createDashboardServer(root) {
       }
       send(404, { error: 'Bulunamadı.' });
     } catch (error) { send(400, { error: error.message }); }
-  });
+  }); server.on('close',()=>syncWorker.stop()); return server;
 }
 module.exports = { createDashboardServer, guard, jsonBody };

@@ -3,21 +3,29 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const SHARED = ['00-charter','10-decisions','20-projects','30-knowledge','40-handoffs','90-receipts/pending','99-archive'];
-function connectGithub(url, destination, actor) {
+async function askAutoSync(value) {
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  if (!process.stdin.isTTY) return false;
+  const readline=require('node:readline'); const io=readline.createInterface({input:process.stdin,output:process.stdout});
+  const answer=await new Promise(resolve=>io.question('TeamBrain bu seçili memory repo’sunu arka planda otomatik senkronize etsin mi? (e/h): ',resolve)); io.close();
+  return /^e|evet|y|yes$/i.test(answer.trim());
+}
+async function connectGithub(url, destination, actor, autoSync) {
   if (typeof url !== 'string' || !/^(https:\/\/github\.com\/[^/\s]+\/[^/\s]+(?:\.git)?|git@github\.com:[^/\s]+\/[^/\s]+(?:\.git)?)$/.test(url)) throw new Error('Use a GitHub HTTPS or SSH repository URL.');
   const {execFileSync}=require('node:child_process'); const target=path.resolve(destination || path.join(process.cwd(),'teambrain-memory'));
   if (!fs.existsSync(path.join(target,'.git'))) { if (fs.existsSync(target) && fs.readdirSync(target).length) throw new Error(`Destination is not empty: ${target}`); execFileSync('git',['clone',url,target],{stdio:'inherit'}); }
   const remote=execFileSync('git',['-C',target,'remote','get-url','origin'],{encoding:'utf8'}).trim();
-  const connection=path.join(target,'.teambrain','connection.json'); fs.mkdirSync(path.dirname(connection),{recursive:true}); fs.writeFileSync(connection,JSON.stringify({schema_version:1,provider:'github',remote,actor_id:actor||process.env.USERNAME||'unknown',connected_at:new Date().toISOString(),sync:'explicit-pull-push'},null,2)+'\n');
-  bootstrap(target, path.basename(target)); return {connected:true, memory_root:target, remote, actor_id:actor||process.env.USERNAME||'unknown', next_steps:['teambrain doctor --root "'+target+'"','teambrain context --root "'+target+'"','teambrain sync --root "'+target+'"']};
+  const automatic=await askAutoSync(autoSync); const connection=path.join(target,'.teambrain','connection.json'); fs.mkdirSync(path.dirname(connection),{recursive:true}); fs.writeFileSync(connection,JSON.stringify({schema_version:1,provider:'github',remote,actor_id:actor||process.env.USERNAME||'unknown',connected_at:new Date().toISOString(),auto_sync:automatic,sync:automatic?'background':'manual',sync_scope:['shared','teams']},null,2)+'\n');
+  bootstrap(target, path.basename(target)); return {connected:true, memory_root:target, remote, actor_id:actor||process.env.USERNAME||'unknown',auto_sync:automatic, next_steps:['teambrain doctor --root "'+target+'"','teambrain context --root "'+target+'"','teambrain dashboard --root "'+target+'"']};
 }
-function createGithubMemory(owner, name, visibility, destination, actor) {
+async function createGithubMemory(owner, name, visibility, destination, actor, autoSync) {
   if (!name || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(name)) throw new Error('Use a simple GitHub repository name.');
   if (!['private','public'].includes(visibility || 'private')) throw new Error('Memory repository visibility must be private or public.');
   const {execFileSync}=require('node:child_process'); const full=owner ? `${owner}/${name}` : name;
   execFileSync('gh',['repo','create',full,`--${visibility||'private'}`,'--add-readme'],{stdio:'inherit'});
   const url=execFileSync('gh',['repo','view',full,'--json','url','--jq','.url'],{encoding:'utf8'}).trim()+'.git';
-  return connectGithub(url,destination,actor);
+  return connectGithub(url,destination,actor,autoSync);
 }
 function paths(root) { return SHARED.map(item => path.join(root, 'shared', item)); }
 function bootstrap(root, project) {

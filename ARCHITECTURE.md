@@ -38,7 +38,7 @@ Creation writes the canonical file first with exclusive-create semantics, then i
 
 - `src/store.js`: canonical Markdown persistence.
 - `src/index.js`: disposable local SQLite projection.
-- `src/git-sync.js`: explicit Git status/pull/push adapter requiring an installed Git client; no automatic commit, scheduler or conflict resolution yet.
+- `src/git-sync.js`: explicit Git status/pull/push adapter. `src/sync-worker.js` provides opt-in background fetch/rebase/commit/push for the selected memory repository and pauses on Git attention states.
 - `src/workspace.js`: team/project discovery, scoped operations and transactional dashboard reindex.
 - `src/dashboard-server.js`: loopback dashboard/API, exact asset allowlist, origin/Host checks, bounded JSON requests and content security policy.
 - `src/local-api.js`: legacy single-project API; the CLI now launches the workspace dashboard instead.

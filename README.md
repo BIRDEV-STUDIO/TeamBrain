@@ -86,6 +86,18 @@ The `actor` value is the stable member identity in receipts and handoffs; never 
 
 `connect project` installs a Git `post-commit` hook. Every commit made by terminal AI or a human becomes a `change.recorded` event in the selected TeamBrain project; the background worker then sends it to GitHub. Only commit metadata and file statistics are captured, never raw terminal conversations.
 
+### Multiple GitHub memory repositories
+
+Use a separate workspace registry when one user belongs to multiple teams or projects:
+
+```powershell
+teambrain repo add --workspace C:\TeamBrain-workspace --url https://github.com/ORG/TEAM-A-MEMORY.git --actor LOGIN
+teambrain repo list --workspace C:\TeamBrain-workspace
+teambrain repo refresh --workspace C:\TeamBrain-workspace --id ORG__TEAM-A-MEMORY
+```
+
+`repo add` asks the user to type `CONNECT` after displaying the exact URL. It clones into an isolated `repos\OWNER__REPO` directory, creates a separate connection/configuration, and refreshes the GitHub member list for that repository only. An AI agent must never infer a repository from a vague request or connect it without this confirmation. Open one selected repository with `teambrain dashboard --root C:\TeamBrain-workspace\repos\OWNER__REPO`; repositories never share events or indexes.
+
 The package is not published to npm. Use the included entrypoint:
 
 ```powershell

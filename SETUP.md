@@ -20,4 +20,6 @@
 
    The hook records every commit automatically. Start TeamBrain with `Start-TeamBrain.bat`; the connected memory repository is used automatically.
 
+For multiple memory repositories, use `repo add` with one workspace. Each repository is isolated by owner/name, remote, index, connection file, and member list. TeamBrain never merges records across repositories.
+
 The public application repository contains the client and protocol. It never receives your private memory, AI transcripts, AvenoxBeyin vault, or credentials.

@@ -74,7 +74,7 @@ class Workspace {
     try { return action({ root, config, db }); } finally { db.close(); }
   }
   snapshot(team, project) {
-    return this.withProject(team, project, ({ config, db }) => ({
+    return this.withProject(team, project, ({ root, config, db }) => ({
       project: { id: project, name: config.project_name || config.project_id },
       actor: config.actor_id,
       events: timeline(db, 1000),

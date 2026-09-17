@@ -2,6 +2,12 @@
 
 All notable changes are documented here.
 
+## 0.4.0-rc.1 — 2026-09-18
+
+- Added the shared TeamBrain repository contract, receipt/decision schemas, and Serena boundaries.
+- Added Windows/POSIX bootstrap, doctor, context, privacy-gated publish, handoff, sync guidance, and update check commands.
+- Preserved manual hook trust and explicit Git network operations.
+
 ## 0.3.0-preview — 2026-09-14
 
 - Added a project-scoped chat screen to the dashboard.

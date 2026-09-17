@@ -6,3 +6,9 @@ coverage/
 data/
 work/
 outputs/
+project.local.yml
+.serena/project.local.yml
+.teambrain/local.json
+.teambrain/bootstrap.json
+.teambrain/connection.json
+.teambrain/rollback/

@@ -4,6 +4,8 @@
 
 TeamBrain is **Git-backed local-first**. A TeamBrain Node runs on each developer's machine. The memory directory is canonical and Git-syncable; each node maintains its own SQLite query index. An optional relay may later distribute presence and low-latency hints, but it must never become the authority for memory.
 
+The shared repository contract is `shared/00-charter`, `10-decisions`, `20-projects`, `30-knowledge`, `40-handoffs`, `90-receipts/pending`, and `99-archive`, with versioned schemas under `contracts/`. Pending receipts are proposals, not facts. A receipt is separate per outcome so branches merge without a shared mutable daily file.
+
 ## Team isolation
 
 A workspace hosts multiple teams, each with multiple projects. The dashboard discovers `teams/<team-id>/team.json`; each project at `teams/<team-id>/projects/<project-id>/` owns its config, canonical memory directory and SQLite index. Queries are scoped to the selected project. Older CLI-created teams are exposed as a legacy project without moving their files. This is organizational separation, not authorization against another local user.
@@ -43,6 +45,7 @@ Creation writes the canonical file first with exclusive-create semantics, then i
 - `src/adapters.js`: AI-provider and relay contracts. Codex, Claude, and WebSocket implementations remain opt-in.
 - `src/integrations/`: opt-in AvenoxBeyin session-import and Serena impact-event boundaries. They preserve TeamBrain's rule that external tools never own canonical memory.
 - Obsidian is a client/adapter only; it must call the node or read the canonical memory format rather than own data.
+- `src/protocol.js`: bootstrap, doctor, privacy-gated receipt publishing, and handoff records. AvenoxBeyin version/checksum configuration is opt-in and never auto-installs or trusts hooks.
 
 ## Daily summaries
 

@@ -1,6 +1,8 @@
 # TeamBrain
 
-A local workspace for team knowledge, project activity and decision history. This is a working local preview, not a completed collaboration service.
+A local-first, Git-backed workspace for reviewed team knowledge, project activity and decision history. Release candidate: the shared-memory protocol is explicit, privacy-first, and offline-capable.
+
+The boundaries are intentional: AvenoxBeyin V3 is each user's private working memory; TeamBrain is the reviewed shared source of truth; Obsidian is a human Markdown interface; Serena is limited to code understanding and refactoring. TeamBrain never creates a shared personal vault.
 
 ## Start on Windows
 
@@ -51,6 +53,35 @@ node --experimental-sqlite bin/teambrain.js dashboard --root C:\MyTeamMemory --p
 `serve` is an alias for the workspace dashboard. A team is selected in the UI rather than fixed at process startup.
 
 ## CLI
+
+For a shared TeamBrain memory repository:
+
+```powershell
+node bin/teambrain.js bootstrap --root C:\TeamBrain --project robotics
+node bin/teambrain.js doctor --root C:\TeamBrain
+node bin/teambrain.js sync --root C:\TeamBrain
+node bin/teambrain.js context --root C:\TeamBrain
+node bin/teambrain.js connect github --url https://github.com/ORG/TEAM-MEMORY.git --memory-root C:\TeamBrain-memory --actor gecekodu
+node bin/teambrain.js github create-memory --owner YOUR-ORG --name teambrain-memory --visibility private --memory-root C:\TeamBrain-memory --actor YOUR_GITHUB_LOGIN
+node bin/teambrain.js publish --root C:\TeamBrain --project robotics --summary "Tests passed" --sources "commit:abc" --privacy-reviewed true
+node bin/teambrain.js handoff --root C:\TeamBrain --summary "Review the pending receipt"
+node bin/teambrain.js update --check
+```
+
+`publish` writes one personal-data-reviewed receipt to `shared/90-receipts/pending/`. A human review must promote it to a canonical decision, project, or knowledge record. Raw conversations are never a publish input. `sync` deliberately reports the explicit pull/push steps; background synchronization and conflict resolution are not silently enabled.
+
+### Team onboarding
+
+The public TeamBrain application repository is only the software. Each team creates its own memory repository inside its GitHub user or organization, normally private. A maintainer grants repository access to each member's individual GitHub account. Each member then runs:
+
+```powershell
+gh auth login
+node C:\TeamBrain\bin\teambrain.js connect github --url https://github.com/YOUR-ORG/YOUR-MEMORY-REPO.git --memory-root C:\TeamBrain-memory --actor YOUR_GITHUB_LOGIN
+```
+
+The `actor` value is the stable member identity in receipts and handoffs; never use a shared account or email address. The command clones the repository, verifies the GitHub URL, creates the shared layout, records a local connection file, and leaves Git network actions explicit. Team members work on personal branches and open pull requests into `main`. GitHub is the central review/distribution layer; TeamBrain itself does not host or see the team's private memory.
+
+`github create-memory` is the one-command version: it uses the user's existing `gh auth login` session, creates the repository under the selected account or organization, then connects it locally. Private visibility is the default.
 
 The package is not published to npm. Use the included entrypoint:
 

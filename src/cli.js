@@ -3,11 +3,21 @@ const path = require('node:path'); const fs = require('node:fs');
 const { init, load } = require('./config'); const { createEvent } = require('./event'); const { writeEvent, readEvent, listEventFiles } = require('./store'); const { openIndex, indexEvent, timeline, why, eventChain, clearIndex } = require('./index'); const { MemorySync } = require('./git-sync');
 const { dailySummary, writeDailyView } = require('./views');
 const { validId, listTeams, teamRoot, registerTeam } = require('./teams');
-function parse(args) { const options = {}; const positional = []; for (let i=0;i<args.length;i++) { if (args[i].startsWith('--')) options[args[i].slice(2)] = args[++i]; else positional.push(args[i]); } return { positional, options }; }
+const protocol = require('./protocol');
+function parse(args) { const options = {}; const positional = []; for (let i=0;i<args.length;i++) { if (args[i].startsWith('--')) { const key=args[i].slice(2); const next=args[i+1]; options[key] = next && !next.startsWith('--') ? args[++i] : true; } else positional.push(args[i]); } return { positional, options }; }
 function root(options) { return path.resolve(options.root || process.cwd()); }
 function print(rows) { console.log(JSON.stringify(rows, null, 2)); }
 async function run(args) {
   const { positional: p, options } = parse(args); const command = p.join(' '); const workspace = root(options);
+  if (command === 'bootstrap') { print(protocol.bootstrap(workspace, options.project)); return; }
+  if (command === 'doctor') { print(protocol.doctor(workspace)); return; }
+  if (command === 'context') { const allowed=['00-charter','10-decisions','20-projects','30-knowledge']; const files=[]; for(const dir of allowed){const base=path.join(workspace,'shared',dir); if(fs.existsSync(base)) for(const f of fs.readdirSync(base,{withFileTypes:true})) if(f.isFile()) files.push(path.join('shared',dir,f.name));} print({source:'approved TeamBrain records only',files}); return; }
+  if (command === 'publish') { print(protocol.publish(workspace, options)); return; }
+  if (command === 'handoff') { print(protocol.handoff(workspace, options)); return; }
+  if (command === 'connect github') { print(protocol.connectGithub(options.url, options['memory-root'] || options.destination, options.actor)); return; }
+  if (command === 'github create-memory') { print(protocol.createGithubMemory(options.owner, options.name, options.visibility || 'private', options['memory-root'] || options.destination, options.actor)); return; }
+  if (command === 'update' && options.check === true) { print({update_check:true,current_version:require('../package.json').version,avenox_target:'3.0.2',message:'No package is downloaded. Review release notes and checksum before updating.'}); return; }
+  if (command === 'sync') { print({mode:'explicit', next_steps:['teambrain sync pull','teambrain sync push'], message:'Git is the review/history layer; no background sync or automatic conflict resolution is enabled.'}); return; }
   if (command === 'dashboard' || command === 'serve') {
     const { createDashboardServer } = require('./dashboard-server');
     const port = Number(options.port || 7340);
@@ -31,6 +41,6 @@ async function run(args) {
   if (command === 'sync status') { print(await new MemorySync(cwd).status()); return; }
   if (command === 'sync pull') { print(await new MemorySync(cwd).pull()); return; }
   if (command === 'sync push') { print(await new MemorySync(cwd).push()); return; }
-  throw new Error('commands: init, team create|list, status, event create, timeline, why, daily generate, reindex, sync status|pull|push, serve');
+  throw new Error('commands: bootstrap, doctor, sync, context, connect github, github create-memory, publish, handoff, update --check, init, team create|list, status, event create, timeline, why, daily generate, reindex, sync status|pull|push, serve');
 }
 module.exports = { run };

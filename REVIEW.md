@@ -14,13 +14,13 @@ https://teambrain.co/ emphasizes shared AI context, Markdown and decisions. http
 
 ## Remaining engineering work
 
-- The Avenox/Serena modules are data converters, not verified upstream integrations or live MCP clients. The earlier claim that the third chosen repository was definitively Obsidian Git was not established from the entire prior conversation.
+- The Avenox module remains an explicit export converter. Serena is now verified through the official `uvx` runner on Python 3.12 and connected to Codex as an MCP server; live semantic analysis still depends on the user's first client approval.
 - Git push/pull remains explicit CLI functionality; no automatic sync worker, remote onboarding or conflict recovery has been implemented. Per-project directories are not automatically Git repositories. Do not push a whole workspace containing multiple teams to one remote.
 - Filesystem separation is not authentication, encryption or team access control. A user with local filesystem access can read all teams. Before remote collaboration: membership, authorization and sync validation are required.
 - Canonical write and SQLite insertion are not a cross-resource transaction. A persisted event whose indexing fails can be recovered with reindex. Crash-safe writes and a durable outbox remain future work.
 - Workspace views load the latest 1,000 indexed records; older entries require future pagination/search. Daily view is deterministic, not AI-generated. Event graph ordering follows declared links, not proven real-world causality.
 - Node SQLite is experimental on Node 22. No binary/installer or production-ready background service is delivered.
-- GitHub CLI authentication is missing in this session. Local source and GitHub publication must not be conflated.
+- The public application repository and its GitHub remote are verified. Team memory remains a separate per-team repository created through `connect github` or `github create-memory`.
 
 ## Validation
 

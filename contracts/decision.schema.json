@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TeamBrain decision",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version","decision_id","title","status","decided_at","decision","rationale","sources"],
+  "properties": {
+    "schema_version":{"type":"integer","const":1}, "decision_id":{"type":"string","minLength":1},
+    "title":{"type":"string","minLength":1}, "status":{"enum":["proposed","accepted","superseded"]},
+    "decided_at":{"type":"string","format":"date-time"}, "decision":{"type":"string","minLength":1},
+    "rationale":{"type":"string","minLength":1}, "sources":{"type":"array","minItems":1,"items":{"type":"string"}},
+    "owner":{"type":"string"}, "supersedes":{"type":"string"}
+  }
+}

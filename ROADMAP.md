@@ -11,7 +11,20 @@
 - [x] Generate a non-canonical daily Markdown view
 - [x] Define Git, AI, relay, and Obsidian extension boundaries
 
-## v0.2 — collaboration hygiene
+## v0.4 RC — shared-memory protocol
+
+- [x] Add the shared TeamBrain directory contract and versioned receipt/decision schemas
+- [x] Add Windows and POSIX bootstrap scripts with explicit hook-trust boundary
+- [x] Add doctor, context, privacy-gated publish, handoff, sync guidance, and update check commands
+- [x] Keep AvenoxBeyin private and Serena code-only
+
+Remaining before 1.0:
+
+- [ ] JSON Schema runtime validation and canonical approval/promotion workflow
+- [ ] Remote onboarding and authenticated membership/authorization
+- [ ] Safe conflict detection/recovery and optional background sync
+
+## v0.2 — collaboration hygiene (carried work)
 
 - [ ] Detect malformed/conflicting events before sync
 - [ ] Opt-in background Git scheduler with surfaced conflict state

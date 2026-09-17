@@ -86,6 +86,8 @@ The `actor` value is the stable member identity in receipts and handoffs; never 
 
 `connect project` installs a Git `post-commit` hook. Every commit made by terminal AI or a human becomes a `change.recorded` event in the selected TeamBrain project; the background worker then sends it to GitHub. Only commit metadata and file statistics are captured, never raw terminal conversations.
 
+The dashboard can create a team directly from `＋ Ekip oluştur`. Enter the team's exact GitHub repository URL; TeamBrain verifies that the repository is reachable, derives the team name when it is left blank, prevents the same repository from being linked twice, and stores the link in the team's metadata. All projects and chat messages created under that team remain isolated under that GitHub-backed team workspace. The repository must already exist and the current user must have Git access; TeamBrain does not silently create repositories or bypass GitHub permissions.
+
 ### Multiple GitHub memory repositories
 
 Use a separate workspace registry when one user belongs to multiple teams or projects:

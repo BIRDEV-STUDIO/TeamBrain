@@ -42,6 +42,14 @@ test('workspace chat persists messages as project-scoped canonical events', () =
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+test('team creation requires a reachable GitHub repository and stores its identity', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-team-github-'));
+  const w = new Workspace(root);
+  assert.throws(() => w.createTeam('Studio', 'https://example.com/studio.git'), /exact GitHub/);
+  const team = w.createTeam('Studio');
+  assert.equal(team.github_repo, null);
+});
+
 test('dashboard HTTP onboarding, input checks, security headers and cross-origin protection', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-http-'));
   const server = createDashboardServer(root);

@@ -2,11 +2,13 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { execFileSync } = require('node:child_process');
 const { init, load } = require('./config');
 const { createEvent } = require('./event');
 const { writeEvent, readEvent, listEventFiles } = require('./store');
 const { openIndex, indexEvent, timeline, eventChain, why } = require('./index');
 const { planner, addCalendar, addTask, setTaskStatus } = require('./planner');
+const { parseUrl } = require('./repo-registry');
 
 function label(value) {
   if (typeof value !== 'string' || !value.trim() || value.length > 100) throw new Error('Ad 1–100 karakter olmalı.');
@@ -48,16 +50,23 @@ class Workspace {
         return { id: project, name: config.project_name || config.project_id };
       });
       if (legacy) projects.unshift({ id: 'legacy', name: 'Önceki kayıtlar' });
-      return { id: team, name: record.name, projects };
+      return { id: team, name: record.name, github_repo: record.github_repo || null, projects };
     });
   }
-  createTeam(name) {
-    name = label(name);
+  createTeam(name, githubUrl) {
+    const github_repo = githubUrl ? (() => {
+      const repo = parseUrl(githubUrl);
+      try { execFileSync('git', ['ls-remote', '--exit-code', githubUrl, 'HEAD'], { stdio: 'ignore', timeout: 15000 }); }
+      catch { throw new Error('GitHub reposuna erişilemedi. Linki ve GitHub yetkini kontrol et.'); }
+      return { ...repo, url: githubUrl.trim(), connected_at: new Date().toISOString() };
+    })() : null;
+    name = label(name || github_repo?.name);
+    if (github_repo && this.teams().some(team => team.github_repo?.full === github_repo.full)) throw new Error('Bu GitHub reposu zaten bir ekibe bağlı.');
     const team = 't-' + crypto.randomUUID();
     const base = this.teamPath(team);
     fs.mkdirSync(base, { recursive: true });
-    fs.writeFileSync(path.join(base, 'team.json'), JSON.stringify({ name }, null, 2), { flag: 'wx' });
-    return { id: team, name, projects: [] };
+    fs.writeFileSync(path.join(base, 'team.json'), JSON.stringify({ name, github_repo }, null, 2), { flag: 'wx' });
+    return { id: team, name, github_repo, projects: [] };
   }
   createProject(team, name) {
     name = label(name);

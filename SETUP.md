@@ -20,6 +20,10 @@
 
    The hook records every commit automatically. Start TeamBrain with `Start-TeamBrain.bat`; the connected memory repository is used automatically.
 
+## Dashboard team setup
+
+You can also create a team from the dashboard. Select `＋ Ekip oluştur`, paste the exact GitHub repository URL, and optionally enter a display name. TeamBrain checks access with Git, saves the repository identity on the team, and uses that team as the boundary for projects, activity, and chat. The same repository cannot be linked to two teams in one workspace. Create the repository and grant collaborator or organization-team access first; TeamBrain does not guess repositories or bypass GitHub authorization.
+
 For multiple memory repositories, use `repo add` with one workspace. Each repository is isolated by owner/name, remote, index, connection file, and member list. TeamBrain never merges records across repositories.
 
 The public application repository contains the client and protocol. It never receives your private memory, AI transcripts, AvenoxBeyin vault, or credentials.

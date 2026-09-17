@@ -14,4 +14,10 @@
 5. Run `teambrain doctor` and inspect the connection. During setup, answer `e` to enable background sync or `h` to keep manual mode. Background mode fetches, rebases, commits, and pushes only the selected memory repo's `shared/` and `teams/` records. Create a branch such as `member/LOGIN` before publishing.
 6. Use `publish --privacy-reviewed true` for outcomes. Review the pending receipt in a pull request, then promote it to a canonical record.
 
+7. Connect each code repository once:
+
+   `node C:\TeamBrain\bin\teambrain.js connect project --repo C:\path\to\code --memory-root C:\TeamBrain-memory --team TEAM_ID --project PROJECT_ID --actor LOGIN`
+
+   The hook records every commit automatically. Start TeamBrain with `Start-TeamBrain.bat`; the connected memory repository is used automatically.
+
 The public application repository contains the client and protocol. It never receives your private memory, AI transcripts, AvenoxBeyin vault, or credentials.

@@ -11,4 +11,5 @@ project.local.yml
 .teambrain/local.json
 .teambrain/bootstrap.json
 .teambrain/connection.json
+.teambrain-project.json
 .teambrain/rollback/

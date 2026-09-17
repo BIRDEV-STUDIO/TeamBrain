@@ -63,6 +63,7 @@ node bin/teambrain.js sync --root C:\TeamBrain
 node bin/teambrain.js context --root C:\TeamBrain
 node bin/teambrain.js connect github --url https://github.com/ORG/TEAM-MEMORY.git --memory-root C:\TeamBrain-memory --actor gecekodu
 node bin/teambrain.js github create-memory --owner YOUR-ORG --name teambrain-memory --visibility private --memory-root C:\TeamBrain-memory --actor YOUR_GITHUB_LOGIN
+node bin/teambrain.js connect project --repo C:\path\to\your\code --memory-root C:\TeamBrain-memory --team TEAM_ID --project PROJECT_ID --actor YOUR_GITHUB_LOGIN
 node bin/teambrain.js publish --root C:\TeamBrain --project robotics --summary "Tests passed" --sources "commit:abc" --privacy-reviewed true
 node bin/teambrain.js handoff --root C:\TeamBrain --summary "Review the pending receipt"
 node bin/teambrain.js update --check
@@ -82,6 +83,8 @@ node C:\TeamBrain\bin\teambrain.js connect github --url https://github.com/YOUR-
 The `actor` value is the stable member identity in receipts and handoffs; never use a shared account or email address. The command clones the repository, verifies the GitHub URL, creates the shared layout, records a local connection file, and asks whether automatic sync is allowed. Team members can work on personal branches and open pull requests into `main`; automatic mode is intended for teams that explicitly accept direct synchronization. GitHub is the central review/distribution layer; TeamBrain itself does not host or see the team's private memory.
 
 `github create-memory` is the one-command version: it uses the user's existing `gh auth login` session, creates the repository under the selected account or organization, then connects it locally. Private visibility is the default.
+
+`connect project` installs a Git `post-commit` hook. Every commit made by terminal AI or a human becomes a `change.recorded` event in the selected TeamBrain project; the background worker then sends it to GitHub. Only commit metadata and file statistics are captured, never raw terminal conversations.
 
 The package is not published to npm. Use the included entrypoint:
 

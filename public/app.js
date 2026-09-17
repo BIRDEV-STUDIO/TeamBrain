@@ -18,6 +18,11 @@ const date = value => new Date(value).toLocaleDateString('tr-TR', { day: 'numeri
 const time = value => new Date(value).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 const today = new Date().toLocaleDateString('tr-TR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 $('date').textContent = today.toLocaleUpperCase('tr-TR');
+const savedTheme = localStorage.getItem('teambrain-theme');
+if (savedTheme === 'dark' || (!savedTheme && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark');
+function updateThemeButton() { const dark=document.documentElement.classList.contains('dark'); $('theme-toggle').textContent=dark?'☀':'◐'; $('theme-toggle').setAttribute('aria-label',dark?'Açık moda geç':'Koyu moda geç'); }
+updateThemeButton();
+$('theme-toggle').addEventListener('click',()=>{const dark=document.documentElement.classList.toggle('dark'); localStorage.setItem('teambrain-theme',dark?'dark':'light'); updateThemeButton();});
 
 async function api(url, data, method = 'POST') {
   const response = await fetch(url, data === undefined ? {} : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });

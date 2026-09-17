@@ -6,6 +6,7 @@ const { init, load } = require('./config');
 const { createEvent } = require('./event');
 const { writeEvent, readEvent, listEventFiles } = require('./store');
 const { openIndex, indexEvent, timeline, eventChain, why } = require('./index');
+const { planner, addCalendar, addTask, setTaskStatus } = require('./planner');
 
 function label(value) {
   if (typeof value !== 'string' || !value.trim() || value.length > 100) throw new Error('Ad 1–100 karakter olmalı.');
@@ -78,9 +79,12 @@ class Workspace {
       actor: config.actor_id,
       events: timeline(db, 1000),
       total: db.prepare('SELECT count(*) AS total FROM events').get().total,
-      sync: 'manual', integrations: 'not-connected'
+      sync: 'manual', integrations: 'not-connected', planner: planner(this.projectPath(team, project))
     }));
   }
+  addCalendar(team, project, input) { return this.withProject(team, project, ({ root, config }) => addCalendar(root, input, config.actor_id)); }
+  addTask(team, project, input) { return this.withProject(team, project, ({ root, config }) => addTask(root, input, config.actor_id)); }
+  setTaskStatus(team, project, task, status) { return this.withProject(team, project, ({ root, config }) => setTaskStatus(root, task, status, config.actor_id)); }
   addEvent(team, project, input) {
     return this.withProject(team, project, ({ root, config, db }) => {
       const event = createEvent({ title: input.title, body: input.body, eventType: input.event_type, source: 'dashboard', causationId: input.causation_id }, config);

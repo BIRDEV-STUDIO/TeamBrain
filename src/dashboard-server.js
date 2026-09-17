@@ -47,6 +47,9 @@ function createDashboardServer(root) {
         if (project && operation === 'chat' && req.method === 'POST') { send(201, workspace.chat(team, project, await jsonBody(req))); return; }
         if (project && operation === 'chain' && req.method === 'GET') { send(200, workspace.chain(team, project, url.searchParams.get('event'))); return; }
         if (project && operation === 'reindex' && req.method === 'POST') { await jsonBody(req); send(200, workspace.reindex(team, project)); return; }
+        if (project && operation === 'calendar' && req.method === 'POST') { send(201, workspace.addCalendar(team, project, await jsonBody(req))); return; }
+        if (project && operation === 'tasks' && req.method === 'POST') { send(201, workspace.addTask(team, project, await jsonBody(req))); return; }
+        if (project && operation === 'tasks' && parts[6] && req.method === 'PATCH') { const input = await jsonBody(req); send(200, workspace.setTaskStatus(team, project, parts[6], input.status)); return; }
       }
       send(404, { error: 'Bulunamadı.' });
     } catch (error) { send(400, { error: error.message }); }

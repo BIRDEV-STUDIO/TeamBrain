@@ -1,0 +1,4 @@
+name: teambrain
+language: javascript
+description: Serena is limited to source-code understanding, tests, and safe refactors. Shared project memory is not stored here.
+memories_path: .serena/memories

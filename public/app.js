@@ -1,7 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const state = { teams: [], team: null, project: null, snapshot: null, view: 'overview', query: '', type: '', mode: null, version: 0 };
+const state = { teams: [], team: null, project: null, snapshot: null, view: 'overview', calendarCursor: new Date(), query: '', type: '', mode: null, version: 0 };
 const names = {
   'note.created': 'Not',
   'issue.detected': 'Sorun',
@@ -13,14 +13,14 @@ const names = {
   'chat.message': 'Sohbet mesajı',
   'chat.reply.generated': 'Yerel yanıt'
 };
-const views = { overview: 'Genel bakış', chat: 'Sohbet', activity: 'Aktivite', decisions: 'Karar defteri', daily: 'Günün özeti', integrations: 'Bağlantılar' };
+const views = { overview: 'Genel bakış', chat: 'Sohbet', activity: 'Aktivite', decisions: 'Karar defteri', calendar: 'Takvim', tasks: 'Görevler', daily: 'Günün özeti', integrations: 'Bağlantılar' };
 const date = value => new Date(value).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
 const time = value => new Date(value).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 const today = new Date().toLocaleDateString('tr-TR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 $('date').textContent = today.toLocaleUpperCase('tr-TR');
 
-async function api(url, data) {
-  const response = await fetch(url, data === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+async function api(url, data, method = 'POST') {
+  const response = await fetch(url, data === undefined ? {} : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'İşlem tamamlanamadı.');
   return result;
@@ -98,6 +98,28 @@ function renderShell(data, decisions) {
   $('metrics').innerHTML = [[data?.total || 0, 'Toplam kayıt', 'Projenin kalıcı hafızası', '≋'], [decisions.length, 'Karar kaydı', 'Gerekçesiyle birlikte', '◇'], [events().filter(e => e.event_type === 'issue.detected').length, 'Sorun kaydı', 'Açık/kapalı takibi henüz yok', '◌'], [new Set(events().map(e => e.actor_id)).size, 'Katkı veren', 'Kayıtlardaki farklı kişiler', '↗']].map(([n, label, hint, icon]) => `<div class="metric"><div class="metric-top"><span>${label}</span><span>${icon}</span></div><strong>${n}</strong><small>${hint}</small></div>`).join('');
   document.querySelectorAll('[data-view]').forEach(b => { b.classList.toggle('active', b.dataset.view === state.view); b.setAttribute('aria-current', b.dataset.view === state.view ? 'page' : 'false'); });
 }
+function plannerEditor(mode) {
+  state.mode = mode; $('form-error').textContent = '';
+  $('editor-title').textContent = mode === 'calendar' ? 'Takvime etkinlik ekle' : 'Yeni görev oluştur';
+  $('fields').innerHTML = mode === 'calendar' ? `<label>Etkinlik adı</label><input name="title" maxlength="200" required placeholder="Örn. Sprint planlama"><label>Tarih</label><input name="date" type="date" required><label>Saat</label><input name="time" type="time"><label>Konum veya bağlantı</label><input name="location" maxlength="200" placeholder="Örn. Toplantı odası / bağlantı"><label>Not</label><textarea name="notes" maxlength="2000" placeholder="Ekip için kısa not"></textarea>` : `<label>Görev</label><input name="title" maxlength="200" required placeholder="Örn. Test senaryolarını hazırla"><label>Sorumlu ekip üyesi</label><input name="assignee" maxlength="200" required placeholder="Örn. Emre"><label>Son tarih</label><input name="due_date" type="date"><label>Açıklama</label><textarea name="description" maxlength="2000" placeholder="Beklenen çıktı"></textarea>`;
+  $('editor').showModal(); $('fields').querySelector('input')?.focus();
+}
+function renderCalendar() {
+  const cursor = state.calendarCursor || new Date(), year = cursor.getFullYear(), month = cursor.getMonth();
+  const monthName = new Date(year, month, 1).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
+  const items = state.snapshot.planner?.calendar || [], byDate = items.reduce((map, item) => { (map[item.date.slice(0, 10)] ||= []).push(item); return map; }, {});
+  const first = new Date(year, month, 1), offset = (first.getDay() + 6) % 7, days = new Date(year, month + 1, 0).getDate();
+  const cells = Array.from({ length: 42 }, (_, index) => {
+    const dayNumber = index - offset + 1, dateObj = new Date(year, month, dayNumber), current = dayNumber > 0 && dayNumber <= days;
+    const key = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+    const dayItems = byDate[key] || [], todayKey = new Date().toISOString().slice(0, 10);
+    return `<div class="month-cell ${current ? '' : 'outside'} ${key === todayKey ? 'today' : ''} ${dayItems.length ? 'has-events' : ''}"><span class="cell-number">${dateObj.getDate()}</span>${dayItems.slice(0, 3).map((item, itemIndex) => `<div class="calendar-chip chip-${itemIndex % 4}" title="${escape(item.title)}">${item.time ? `<small>${escape(item.time)}</small>` : ''}${escape(item.title)}</div>`).join('')}${dayItems.length > 3 ? `<span class="more-events">+${dayItems.length - 3} etkinlik</span>` : ''}</div>`;
+  }).join('');
+  $('content').innerHTML = `<div class="calendar-heading"><div><span class="eyebrow">EKİP PLANI</span><h2>${escape(monthName.charAt(0).toLocaleUpperCase('tr-TR') + monthName.slice(1))}</h2><p>${items.length ? `${items.length} etkinlik planlandı` : 'Etkinlikleri günlere ekleyerek ekibin ritmini görünür kıl.'}</p></div><div class="calendar-actions"><button class="secondary" data-calendar-nav="prev" aria-label="Önceki ay">‹</button><button class="secondary today-button" data-calendar-nav="today">Bugün</button><button class="secondary" data-calendar-nav="next" aria-label="Sonraki ay">›</button><button class="primary" data-action="calendar">＋ Etkinlik ekle</button></div></div><section class="calendar-panel"><div class="weekdays">${['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'].map(day => `<span>${day}</span>`).join('')}</div><div class="month-grid">${cells}</div></section><div class="calendar-legend"><span><i class="legend-dot chip-0"></i>Toplantı</span><span><i class="legend-dot chip-1"></i>Teslim</span><span><i class="legend-dot chip-2"></i>Çalışma</span><span><i class="legend-dot chip-3"></i>Diğer</span></div>`;
+}function renderTasks() {
+  const tasks = state.snapshot.planner?.tasks || [], done = tasks.filter(t => t.status === 'done').length;
+  $('content').innerHTML = `<div class="planner-toolbar"><div><h2>Ekip görevleri</h2><p>${done}/${tasks.length} görev tamamlandı. Sorumlu kişi bitirdiğinde kutuyu işaretleyin.</p></div><button class="primary" data-action="task">＋ Görev ata</button></div><section class="panel planner-list">${tasks.map(task => `<article class="task-item ${task.status === 'done' ? 'done' : ''}"><button class="task-check" data-task="${escape(task.id)}" aria-label="${task.status === 'done' ? 'Tamamlandı olarak işaretini kaldır' : 'Görevi tamamlandı işaretle'}">${task.status === 'done' ? '✓' : ''}</button><div><h3>${escape(task.title)}</h3><p>Sorumlu: <strong>${escape(task.assignee)}</strong>${task.due_date ? ` · Son tarih: ${escape(task.due_date)}` : ''}</p>${task.description ? `<small>${escape(task.description)}</small>` : ''}${task.completed_by ? `<small class="task-completed">Tamamlayan: ${escape(task.completed_by)}</small>` : ''}</div></article>`).join('') || empty('Henüz görev yok.', 'Ekip üyelerine görev atayarak başlayın.', {id:'task',text:'＋ İlk görevi ata'})}</section>`;
+}
 function render() {
   const data = state.snapshot;
   const decisions = events().filter(e => e.event_type.startsWith('decision.'));
@@ -110,6 +132,8 @@ function render() {
   if (state.view === 'overview') renderOverview(decisions);
   else if (state.view === 'chat') renderChat();
   else if (['activity', 'decisions'].includes(state.view)) renderActivity();
+  else if (state.view === 'calendar') renderCalendar();
+  else if (state.view === 'tasks') renderTasks();
   else if (state.view === 'daily') renderDaily();
   else renderConnections();
 }
@@ -181,13 +205,17 @@ async function detail(eventId) {
 $('team').addEventListener('change', async e => { state.team = e.target.value; state.project = team()?.projects[0]?.id || null; state.query = ''; choose(); await loadProject(); });
 $('projects').addEventListener('click', async e => { const b = e.target.closest('[data-project]'); if (b) { state.project = b.dataset.project; state.query = ''; state.type = ''; choose(); await loadProject(); } });
 $('nav').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) { state.view = b.dataset.view; state.query = ''; state.type = ''; render(); } });
-$('content').addEventListener('click', async e => {
+$('content').addEventListener('click', async e => {  const calendarNav = e.target.closest('[data-calendar-nav]')?.dataset.calendarNav;
+  if (calendarNav) { const cursor = state.calendarCursor || new Date(); if (calendarNav === 'today') state.calendarCursor = new Date(); else state.calendarCursor = new Date(cursor.getFullYear(), cursor.getMonth() + (calendarNav === 'next' ? 1 : -1), 1); render(); return; }
   const event = e.target.closest('[data-event]');
   if (event) { await detail(event.dataset.event); return; }
   const action = e.target.closest('[data-action]')?.dataset.action;
   if (['team', 'project', 'event'].includes(action)) editor(action);
+  if (action === 'calendar' || action === 'task') plannerEditor(action);
   if (action === 'activity') { state.view = 'activity'; render(); }
   if (action === 'refresh') await loadProject();
+  const taskButton = e.target.closest('[data-task]');
+  if (taskButton) { try { await api(base() + '/tasks/' + encodeURIComponent(taskButton.dataset.task), { status: taskButton.closest('.task-item').classList.contains('done') ? 'open' : 'done' }, 'PATCH'); await loadProject(); } catch (error) { toast(error.message); } return; }
   if (action === 'reindex') { try { const result = await api(base() + '/reindex', {}); toast(`${result.indexed} kayıt indekslendi.`); await loadProject(); } catch (error) { toast(error.message); } }
 });
 $('add-team').onclick = () => editor('team');
@@ -204,6 +232,8 @@ $('editor-form').addEventListener('submit', async e => {
   try {
     if (state.mode === 'team') { const result = await api('/api/teams', input); state.team = result.id; state.project = null; }
     else if (state.mode === 'project') { const result = await api(`/api/teams/${state.team}/projects`, input); state.project = result.id; }
+    else if (state.mode === 'calendar') await api(base() + '/calendar', input);
+    else if (state.mode === 'task') await api(base() + '/tasks', input);
     else await api(base() + '/events', input);
     $('editor').close();
     toast('Kaydedildi.');

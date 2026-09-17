@@ -1,0 +1,14 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+function file(root) { return path.join(root, '.teambrain', 'planner.json'); }
+function read(root) { const target = file(root); if (!fs.existsSync(target)) return { schema_version: 1, calendar: [], tasks: [] }; const data = JSON.parse(fs.readFileSync(target, 'utf8')); return { schema_version: 1, calendar: Array.isArray(data.calendar) ? data.calendar : [], tasks: Array.isArray(data.tasks) ? data.tasks : [] }; }
+function save(root, data) { const target = file(root); const temp = `${target}.${process.pid}.tmp`; fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(temp, JSON.stringify(data, null, 2) + '\n'); fs.renameSync(temp, target); }
+function text(value, name, max = 200) { if (typeof value !== 'string' || !value.trim() || value.length > max) throw new Error(`${name} 1–${max} karakter olmalı.`); return value.trim(); }
+function optionalDate(value, name) { if (!value) return null; if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(value)) throw new Error(`${name} geçerli bir tarih olmalı.`); return value; }
+function planner(root) { return read(root); }
+function addCalendar(root, input, actor) { const item = { id: crypto.randomUUID(), title: text(input.title, 'Etkinlik başlığı'), date: optionalDate(input.date, 'Etkinlik tarihi') || new Date().toISOString().slice(0, 10), time: typeof input.time === 'string' ? input.time : '', location: typeof input.location === 'string' ? input.location.trim().slice(0, 200) : '', notes: typeof input.notes === 'string' ? input.notes.trim().slice(0, 2000) : '', created_by: actor, created_at: new Date().toISOString() }; const data = read(root); data.calendar.push(item); save(root, data); return item; }
+function addTask(root, input, actor) { const item = { id: crypto.randomUUID(), title: text(input.title, 'Görev başlığı'), assignee: text(input.assignee, 'Sorumlu'), due_date: optionalDate(input.due_date, 'Son tarih'), description: typeof input.description === 'string' ? input.description.trim().slice(0, 2000) : '', status: 'open', created_by: actor, created_at: new Date().toISOString(), completed_at: null, completed_by: null }; const data = read(root); data.tasks.push(item); save(root, data); return item; }
+function setTaskStatus(root, taskId, status, actor) { if (!['open', 'done'].includes(status)) throw new Error('Geçersiz görev durumu.'); const data = read(root); const task = data.tasks.find(item => item.id === taskId); if (!task) throw new Error('Görev bulunamadı.'); task.status = status; task.completed_at = status === 'done' ? new Date().toISOString() : null; task.completed_by = status === 'done' ? actor : null; save(root, data); return task; }
+module.exports = { planner, addCalendar, addTask, setTaskStatus };

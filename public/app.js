@@ -125,7 +125,7 @@ function render() {
   const decisions = events().filter(e => e.event_type.startsWith('decision.'));
   renderShell(data, decisions);
   if (!state.project) {
-    $('content').innerHTML = `<section class="panel">${empty(state.team ? 'Bu ekibin ilk projesini ekle.' : 'Birlikte çalıştığın ekiple başla.', 'Ekip ve projelerini buradan oluştur. Her projenin kayıtları ayrı tutulur.', { id: state.team ? 'project' : 'team', text: state.team ? '＋ Proje oluştur' : '＋ Ekip oluştur' })}</section>`;
+    $('content').innerHTML = `<section class="panel">${empty(state.team ? 'Bu ekibin ilk projesini ekle.' : 'Ortak beyni bağla ve ekibini başlat.', state.team ? 'Her projenin kayıtları ayrı tutulur.' : 'Önce Bağlantılar sekmesinde GitHub memory repo durumunu kontrol et. Sonra ekip ve proje oluştur. Üyeler aynı memory repo’yu kendi actor kimlikleriyle kullanır.', { id: state.team ? 'project' : 'team', text: state.team ? '＋ Proje oluştur' : '＋ Ekip oluştur' })}</section>`;
     return;
   }
   if (!data) { $('content').innerHTML = '<div class="panel empty" role="status">Proje yükleniyor…</div>'; return; }
@@ -248,3 +248,18 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); state.view = 'activity'; render(); $('search')?.focus(); }
 });
 reloadTeams().catch(error => { $('content').textContent = 'Bağlantı kurulamadı: ' + error.message; toast(error.message); });
+
+// The connection view reflects the selected memory repository instead of a hard-coded preview state.
+function renderConnections() {
+  const c = state.snapshot?.connection || {};
+  const github = c.github?.connected ? `Bağlı · ${escape(c.github.actor_id || 'kimlik yok')}` : 'Bağlı değil';
+  const serena = c.serena?.configured ? 'Proje yapılandırması bulundu' : 'Yerel kod projesinde etkinleştirilmeli';
+  const cards = [
+    ['Git paylaşımı', github, c.github?.connected ? `Remote: ${escape(c.github.remote || '')}. Pull/push işlemleri açık ve bilinçlidir.` : 'Memory reposunu SETUP.md veya connect github komutuyla bağla.'],
+    ['Chat sağlayıcıları', 'Yerel motor aktif', 'Sohbet yerel TeamBrain kayıtlarını arar; harici AI sağlayıcısı otomatik çağrılmaz.'],
+    ['Serena', serena, 'Serena yalnızca kod sembolleri ve güvenli refactor içindir; ekip hafızasının sahibi değildir.'],
+    ['AvenoxBeyin', 'Özel / manuel aktarım', 'Kişisel vault otomatik okunmaz. Yalnızca gizlilikten geçirilmiş özet aktarılır.'],
+    ['Obsidian', 'Markdown uyumlu', 'Bu memory reposunu Obsidian ile açabilirsin; SQLite ve generated görünümler paylaşılmaz.']
+  ];
+  $('content').innerHTML = `<div class="connections">${cards.map(([name,status,text]) => `<section class="panel connection"><h3>${name}</h3><span class="badge">${status}</span><p>${text}</p></section>`).join('')}</div><div class="link-status">Bağlantı değiştiyse TeamBrain’i yeniden başlat. <button class="secondary" data-action="reindex">İndeksi yenile</button></div>`;
+}

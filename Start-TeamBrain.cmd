@@ -10,5 +10,13 @@ if errorlevel 1 (
 echo TeamBrain http://127.0.0.1:7340 adresinde aciliyor.
 echo Bu pencereyi kapatmak sunucuyu durdurur.
 start "" "http://127.0.0.1:7340"
-node --experimental-sqlite bin\teambrain.js dashboard --root data --port 7340
+if defined TEAMBRAIN_MEMORY_ROOT (
+  set "MEMORY_ROOT=%TEAMBRAIN_MEMORY_ROOT%"
+) else if exist "C:\TeamBrain-memory\.git" (
+  set "MEMORY_ROOT=C:\TeamBrain-memory"
+) else (
+  set "MEMORY_ROOT=%~dp0data"
+)
+echo Memory: %MEMORY_ROOT%
+node --experimental-sqlite bin\teambrain.js dashboard --root "%MEMORY_ROOT%" --port 7340
 pause

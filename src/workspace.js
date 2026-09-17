@@ -79,8 +79,13 @@ class Workspace {
       actor: config.actor_id,
       events: timeline(db, 1000),
       total: db.prepare('SELECT count(*) AS total FROM events').get().total,
-      sync: 'manual', integrations: 'not-connected', planner: planner(this.projectPath(team, project))
+      sync: 'manual', integrations: 'local', connection: this.connection(root), planner: planner(this.projectPath(team, project))
     }));
+  }
+  connection(root) {
+    const file = path.join(root, '.teambrain', 'connection.json');
+    if (!fs.existsSync(file)) return { github: { connected: false }, serena: { configured: fs.existsSync(path.join(root, '.serena', 'project.yml')) }, avenox: { mode: 'manual-export-only' } };
+    try { const connection=JSON.parse(fs.readFileSync(file,'utf8')); return { github: { connected:true, remote:connection.remote, actor_id:connection.actor_id, sync:connection.sync }, serena: { configured: fs.existsSync(path.join(root,'.serena','project.yml')) }, avenox: { mode:'manual-export-only' } }; } catch { return { github:{connected:false, error:'connection.json is invalid'}, serena:{configured:false}, avenox:{mode:'manual-export-only'} }; }
   }
   addCalendar(team, project, input) { return this.withProject(team, project, ({ root, config }) => addCalendar(root, input, config.actor_id)); }
   addTask(team, project, input) { return this.withProject(team, project, ({ root, config }) => addTask(root, input, config.actor_id)); }

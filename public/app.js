@@ -148,14 +148,16 @@ function renderOverview(decisions) {
 }
 function renderChat() {
   const messages = chatEvents();
-  $('content').innerHTML = `<section class="chat-panel"><div class="chat-history" id="chat-history">${messages.map(chatBubble).join('') || empty('Bu projede sohbet yok.', 'Bir soru sor veya proje notu bırak. Mesajlar proje hafızasına kaydedilir.')}</div><form id="chat-form" class="chat-composer"><label class="sr-only" for="chat-message">Mesaj</label><textarea id="chat-message" name="message" maxlength="50000" placeholder="Bu projede neyi hatırlamamı veya bulmamı istersin?"></textarea><button class="primary" id="send-chat">Gönder</button></form></section><div class="link-status">Sohbet şu an yerel hafıza aramasıyla cevap verir. Codex/Claude adapter eklenince aynı ekran gerçek AI sağlayıcıya bağlanacak.</div>`;
+  const github = state.snapshot.connection?.github;
+  const sharing = github?.connected ? (github.sync === 'background' ? 'otomatik olarak GitHub memory reposuna paylaşılır' : 'GitHub memory reposuna manuel senkronlanır') : 'GitHub bağlantısı kurulmadı';
+  $('content').innerHTML = `<section class="chat-panel"><div class="chat-history" id="chat-history"><div class="panel-head chat-context"><strong>Seçili proje sohbeti</strong><small>${escape(sharing)} · Mesajlar yalnızca bu projenin hafızasında tutulur.</small></div>${messages.map(chatBubble).join('') || empty('Bu projede sohbet yok.', 'Bir soru sor veya ekip arkadaşlarına mesaj bırak. Mesajlar proje hafızasına kaydedilir.')}</div><form id="chat-form" class="chat-composer"><label class="sr-only" for="chat-message">Mesaj</label><textarea id="chat-message" name="message" maxlength="50000" placeholder="Ekip arkadaşlarına mesaj yaz…"></textarea><button class="primary" id="send-chat">Gönder</button></form></section><div class="link-status">Mesajlar GitHub senkronizasyonuyla ekipçe paylaşılır. Her mesaj seçili projeye, gönderen kişinin TeamBrain kimliğiyle kaydedilir. ${escape(sharing)}.</div>`;
   const history = $('chat-history');
   history.scrollTop = history.scrollHeight;
   $('chat-form').addEventListener('submit', submitChat);
 }
 function chatBubble(event) {
   const reply = event.event_type === 'chat.reply.generated';
-  return `<button class="chat-bubble ${reply ? 'assistant' : 'user'}" data-event="${escape(event.event_id)}"><span class="chat-role">${reply ? 'TeamBrain' : escape(event.actor_id)}</span><span class="chat-text">${escape(event.body)}</span><time>${time(event.created_at)}</time></button>`;
+  return `<button class="chat-bubble ${reply ? 'assistant' : 'user'}" data-event="${escape(event.event_id)}"><span class="chat-role">${reply ? 'TeamBrain' : `Gönderen · ${escape(event.actor_id || 'Bilinmeyen kullanıcı')}`}</span><span class="chat-text">${escape(event.body)}</span><time>${date(event.created_at)} · ${time(event.created_at)}</time></button>`;
 }
 async function submitChat(event) {
   event.preventDefault();

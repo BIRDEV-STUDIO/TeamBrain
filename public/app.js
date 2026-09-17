@@ -81,7 +81,8 @@ function eventIcon(event) {
 }
 function record(event) {
   const issue = event.event_type === 'issue.detected';
-  return `<button class="record" data-event="${escape(event.event_id)}"><span class="record-icon ${issue ? 'issue' : ''}">${eventIcon(event)}</span><span class="record-main"><span class="record-title">${escape(event.title)}</span><span class="record-preview">${escape(event.body || 'Bağlamı görmek için kaydı aç.')}</span><span class="record-meta">${escape(event.actor_id)} · ${escape(names[event.event_type] || event.event_type)}</span></span><time class="record-time">${date(event.created_at)}</time></button>`;
+  const actor = event.actor_id || 'Bilinmeyen kullanıcı';
+  return `<button class="record" data-event="${escape(event.event_id)}"><span class="record-icon ${issue ? 'issue' : ''}">${eventIcon(event)}</span><span class="record-main"><span class="record-title">${escape(event.title)}</span><span class="record-preview">${escape(event.body || 'Bağlamı görmek için kaydı aç.')}</span><span class="record-meta">Kullanıcı: ${escape(actor)} · ${escape(names[event.event_type] || event.event_type)}</span></span><time class="record-time" datetime="${escape(event.created_at)}"><span>${date(event.created_at)} · ${time(event.created_at)}</span></time></button>`;
 }
 function filtered() {
   return events().filter(e => (!state.query || `${e.title} ${e.body}`.toLocaleLowerCase('tr-TR').includes(state.query.toLocaleLowerCase('tr-TR'))) && (!state.type || e.event_type === state.type) && (state.view !== 'decisions' || e.event_type.startsWith('decision.')));

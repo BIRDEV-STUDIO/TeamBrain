@@ -10,6 +10,7 @@ const { openIndex, indexEvent, timeline, eventChain, why } = require('./index');
 const { planner, addCalendar, addTask, setTaskStatus } = require('./planner');
 const { parseUrl } = require('./repo-registry');
 const { read: readMembers, refresh: refreshMembers } = require('./team-members');
+const { read: readChat, append: appendChat, migrateLegacy: migrateLegacyChat } = require('./chat-store');
 
 function label(value) {
   if (typeof value !== 'string' || !value.trim() || value.length > 100) throw new Error('Ad 1–100 karakter olmalı.');
@@ -92,19 +93,31 @@ class Workspace {
     try { return action({ root, config, db }); } finally { db.close(); }
   }
   snapshot(team, project) {
-    return this.withProject(team, project, ({ root, config, db }) => ({
-      project: { id: project, name: config.project_name || config.project_id },
-      actor: config.actor_id,
-      events: timeline(db, 1000),
-      total: db.prepare('SELECT count(*) AS total FROM events').get().total,
-      sync: this.connection(root).github?.sync || 'manual', integrations: 'local', connection: this.connection(root), planner: planner(this.projectPath(team, project))
-      , members: this.teams().find(item => item.id === team)?.members || []
-    }));
+    return this.withProject(team, project, ({ root, config, db }) => {
+      const legacyChat = migrateLegacyChat(root, db), chat = legacyChat.messages;
+      const events = [...timeline(db, 1000), ...chat].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 1000);
+      const connection = this.connection(root);
+      return {
+        project: { id: project, name: config.project_name || config.project_id },
+        actor: config.actor_id,
+        events,
+        chat,
+        total: db.prepare('SELECT count(*) AS total FROM events').get().total + chat.length,
+        sync: connection.github?.sync || 'manual', integrations: 'local', connection, planner: planner(this.projectPath(team, project)),
+        members: this.teams().find(item => item.id === team)?.members || []
+      };
+    });
   }
   connection(root) {
-    const file = path.join(root, '.teambrain', 'connection.json');
-    if (!fs.existsSync(file)) return { github: { connected: false }, serena: { configured: fs.existsSync(path.join(root, '.serena', 'project.yml')) }, avenox: { mode: 'manual-export-only' } };
-    try { const connection=JSON.parse(fs.readFileSync(file,'utf8')); return { github: { connected:true, remote:connection.remote, actor_id:connection.actor_id, sync:connection.sync }, serena: { configured: fs.existsSync(path.join(root,'.serena','project.yml')) }, avenox: { mode:'manual-export-only' } }; } catch { return { github:{connected:false, error:'connection.json is invalid'}, serena:{configured:false}, avenox:{mode:'manual-export-only'} }; }
+    let cursor = path.resolve(root), connectionFile = null;
+    while ((cursor === this.root || cursor.startsWith(this.root + path.sep)) && cursor.length >= this.root.length) {
+      const candidate = path.join(cursor, '.teambrain', 'connection.json');
+      if (fs.existsSync(candidate)) { connectionFile = candidate; break; }
+      if (cursor === this.root) break;
+      cursor = path.dirname(cursor);
+    }
+    if (!connectionFile) return { github: { connected: false }, serena: { configured: fs.existsSync(path.join(root, '.serena', 'project.yml')) }, avenox: { mode: 'manual-export-only' } };
+    try { const connection=JSON.parse(fs.readFileSync(connectionFile,'utf8')); return { github: { connected:true, remote:connection.remote, actor_id:connection.actor_id, sync:connection.sync, root:cursor }, serena: { configured: fs.existsSync(path.join(root,'.serena','project.yml')) }, avenox: { mode:'manual-export-only' } }; } catch { return { github:{connected:false, error:'connection.json is invalid'}, serena:{configured:false}, avenox:{mode:'manual-export-only'} }; }
   }
   addCalendar(team, project, input) { return this.withProject(team, project, ({ root, config }) => addCalendar(root, input, config.actor_id)); }
   addTask(team, project, input) { return this.withProject(team, project, ({ root, config }) => addTask(root, input, config.actor_id)); }
@@ -127,8 +140,7 @@ class Workspace {
         eventType: 'chat.message',
         source: 'dashboard-chat'
       }, config);
-      const userFile = writeEvent(root, userEvent);
-      indexEvent(db, userEvent, userFile);
+      appendChat(root, userEvent);
 
       const matches = why(db, text.split(/\s+/).filter(Boolean).slice(0, 4).join(' ')).filter(event => event.event_id !== userEvent.event_id).slice(0, 3);
       const recent = timeline(db, 5).filter(event => event.event_id !== userEvent.event_id && event.event_type !== 'chat.reply.generated').slice(0, 3);
@@ -150,8 +162,7 @@ class Workspace {
         source: 'teambrain-local-assistant',
         causationId: userEvent.event_id
       }, config);
-      const replyFile = writeEvent(root, replyEvent);
-      indexEvent(db, replyEvent, replyFile);
+      appendChat(root, replyEvent);
       return { user: userEvent, reply: replyEvent };
     });
   }

@@ -158,15 +158,16 @@ function renderOverview(decisions) {
 function renderChat() {
   const messages = chatEvents();
   const github = state.snapshot.connection?.github;
-  const sharing = github?.connected ? (github.sync === 'background' ? 'otomatik olarak GitHub memory reposuna paylaşılır' : 'GitHub memory reposuna manuel senkronlanır') : 'GitHub bağlantısı kurulmadı';
-  $('content').innerHTML = `<section class="chat-panel"><div class="chat-history" id="chat-history"><div class="panel-head chat-context"><strong>Seçili proje sohbeti</strong><small>${escape(sharing)} · Mesajlar yalnızca bu projenin hafızasında tutulur.</small></div>${messages.map(chatBubble).join('') || empty('Bu projede sohbet yok.', 'Bir soru sor veya ekip arkadaşlarına mesaj bırak. Mesajlar proje hafızasına kaydedilir.')}</div><form id="chat-form" class="chat-composer"><label class="sr-only" for="chat-message">Mesaj</label><textarea id="chat-message" name="message" maxlength="50000" placeholder="Ekip arkadaşlarına mesaj yaz…"></textarea><button class="primary" id="send-chat">Gönder</button></form></section><div class="link-status">Mesajlar GitHub senkronizasyonuyla ekipçe paylaşılır. Her mesaj seçili projeye, gönderen kişinin TeamBrain kimliğiyle kaydedilir. ${escape(sharing)}.</div>`;
+  const sharing = github?.connected ? (github.sync === 'background' ? 'GitHub’a otomatik gönderiliyor' : 'GitHub’a manuel senkron bekliyor') : 'GitHub bağlantısı kurulmadı';
+  const privacy = 'Ekip içi sohbet; Obsidian bilgi kayıtlarına dahil edilmez.';
+  $('content').innerHTML = `<section class="chat-panel"><div class="chat-history" id="chat-history"><div class="panel-head chat-context"><strong>Seçili proje ekip sohbeti</strong><small>${escape(sharing)} · ${privacy}</small></div>${messages.map(chatBubble).join('') || empty('Bu projede sohbet yok.', 'Ekip arkadaşlarına mesaj bırak. Sohbet yalnızca bu projenin gizli TeamBrain sohbet alanında tutulur.')}</div><form id="chat-form" class="chat-composer"><label class="sr-only" for="chat-message">Mesaj</label><textarea id="chat-message" name="message" maxlength="50000" placeholder="Ekip arkadaşlarına mesaj yaz…"></textarea><button class="primary" id="send-chat">Gönder</button></form></section><div class="link-status">${privacy} Mesajlar seçili projeye ve gönderen kişinin TeamBrain kimliğine bağlıdır. ${escape(sharing)}.</div>`;
   const history = $('chat-history');
   history.scrollTop = history.scrollHeight;
   $('chat-form').addEventListener('submit', submitChat);
 }
 function chatBubble(event) {
   const reply = event.event_type === 'chat.reply.generated';
-  return `<button class="chat-bubble ${reply ? 'assistant' : 'user'}" data-event="${escape(event.event_id)}"><span class="chat-role">${reply ? 'TeamBrain' : `Gönderen · ${escape(event.actor_id || 'Bilinmeyen kullanıcı')}`}</span><span class="chat-text">${escape(event.body)}</span><time>${date(event.created_at)} · ${time(event.created_at)}</time></button>`;
+  return `<article class="chat-bubble ${reply ? 'assistant' : 'user'}"><span class="chat-role">${reply ? 'TeamBrain' : `Gönderen · ${escape(event.actor_id || 'Bilinmeyen kullanıcı')}`}</span><span class="chat-text">${escape(event.body)}</span><time>${date(event.created_at)} · ${time(event.created_at)}</time></article>`;
 }
 async function submitChat(event) {
   event.preventDefault();

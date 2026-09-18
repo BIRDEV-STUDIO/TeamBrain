@@ -37,8 +37,22 @@ test('workspace chat persists messages as project-scoped canonical events', () =
     assert.equal(chat.reply.causation_id, chat.user.event_id);
     assert.match(chat.reply.body, /Use Git memory|son bağlam|yerel kayıt/i);
     assert.equal(w.snapshot(team.id, robot.id).events.filter(e => e.event_type.startsWith('chat.')).length, 2);
+    assert.equal(fs.existsSync(path.join(w.projectPath(team.id, robot.id), '.teambrain', 'chat.json')), true);
+    assert.equal(fs.readdirSync(path.join(w.projectPath(team.id, robot.id), 'memory', 'events')).filter(file => file.endsWith('.md')).length, 0, 'chat must not create Obsidian-facing event markdown');
     assert.equal(w.snapshot(team.id, web.id).events.length, 0);
     assert.throws(() => w.chat(team.id, robot.id, { message: ' ' }));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('project snapshots inherit the GitHub connection from the memory workspace root', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-connection-'));
+  try {
+    fs.mkdirSync(path.join(root, '.teambrain'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.teambrain', 'connection.json'), JSON.stringify({ remote: 'https://github.com/acme/memory.git', actor_id: 'ada', sync: 'background' }));
+    const w = new Workspace(root), team = w.createTeam('Studio'), project = w.createProject(team.id, 'Robot');
+    const snapshot = w.snapshot(team.id, project.id);
+    assert.equal(snapshot.connection.github.connected, true);
+    assert.equal(snapshot.connection.github.sync, 'background');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

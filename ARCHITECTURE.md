@@ -53,7 +53,7 @@ Daily summaries are generated views derived from event documents and may be rege
 
 ## Chat
 
-The dashboard chat is project-scoped and local-first. A user message is persisted as `chat.message`; TeamBrain's current local assistant reply is persisted as `chat.reply.generated` with `causation_id` pointing to the message that caused it. The first assistant implementation searches the local SQLite projection and cites matching or recent project records. It is deliberately not a remote AI integration yet. Future Codex, Claude or Ollama providers should implement the adapter contract and keep the same event boundary: private provider context can help generate a reply, but the canonical shared memory remains the explicit event document.
+The dashboard chat is a project-scoped team chat. Messages are persisted in the project's hidden `.teambrain/chat.json`, not as Obsidian-facing Markdown records; legacy chat event files are migrated into `.teambrain/chat-archive/` when the project is opened. The `teams/` sync scope sends this chat file to the connected GitHub memory repository, while normal Obsidian views remain focused on reviewed knowledge and decisions. TeamBrain's current local assistant reply is also stored in the hidden chat store with `causation_id` pointing to the message that caused it.
 
 ## Dashboard and deployment
 

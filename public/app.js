@@ -23,6 +23,14 @@ if (savedTheme === 'dark' || (!savedTheme && matchMedia('(prefers-color-scheme: 
 function updateThemeButton() { const dark=document.documentElement.classList.contains('dark'); $('theme-toggle').textContent=dark?'☾':'☀'; $('theme-toggle').setAttribute('aria-label',dark?'Açık moda geç':'Koyu moda geç'); }
 updateThemeButton();
 $('theme-toggle').addEventListener('click',()=>{const dark=document.documentElement.classList.toggle('dark'); localStorage.setItem('teambrain-theme',dark?'dark':'light'); updateThemeButton();});
+async function checkForUpdate() {
+  try {
+    const update = await api('/api/update'); const notice = $('update-notice');
+    if (!update.available || localStorage.getItem('teambrain-dismissed-update') === update.latest) { notice.hidden = true; return; }
+    notice.innerHTML = `<span>Yeni TeamBrain sürümü hazır: <strong>${escape(update.name || update.latest)}</strong> · Mevcut sürüm ${escape(update.current)}</span><span><a href="${escape(update.url)}" target="_blank" rel="noreferrer">Sürüm notlarını aç ↗</a> <button type="button" id="dismiss-update" aria-label="Bildirimi kapat">×</button></span>`;
+    notice.hidden = false; $('dismiss-update').onclick = () => { localStorage.setItem('teambrain-dismissed-update', update.latest); notice.hidden = true; };
+  } catch {}
+}
 
 async function api(url, data, method = 'POST') {
   const response = await fetch(url, data === undefined ? {} : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
@@ -286,6 +294,8 @@ $('editor-form').addEventListener('submit', async e => {
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); state.view = 'activity'; render(); $('search')?.focus(); }
 });
+checkForUpdate();
+setInterval(checkForUpdate, 30 * 60 * 1000);
 reloadTeams().catch(error => { $('content').textContent = 'Bağlantı kurulamadı: ' + error.message; toast(error.message); });
 
 // The connection view reflects the selected memory repository instead of a hard-coded preview state.

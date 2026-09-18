@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Workspace } = require('./workspace');
 const { SyncWorker } = require('./sync-worker');
+const { checkForUpdate } = require('./update-check');
 const assets = { '/': ['index.html', 'text/html'], '/app.css': ['app.css', 'text/css'], '/app.js': ['app.js', 'text/javascript'] };
 
 function guard(req) {
@@ -37,6 +38,7 @@ function createDashboardServer(root) {
         res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8` });
         res.end(fs.readFileSync(path.join(__dirname, '..', 'public', file))); return;
       }
+      if (req.method === 'GET' && url.pathname === '/api/update') { send(200, await checkForUpdate()); return; }
       if (url.pathname === '/api/teams') {
         if (req.method === 'GET') { send(200, workspace.teams()); return; }
         if (req.method === 'POST') { const input = await jsonBody(req); send(201, await withSync(workspace.createTeam(input.name, input.github_url))); return; }

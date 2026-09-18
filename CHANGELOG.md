@@ -4,6 +4,8 @@ All notable changes are documented here.
 
 ## 0.4.0-rc.1 — 2026-09-18
 
+- Added an interactive GitHub connection wizard that confirms the repository, local destination, actor identity, and automatic-sync choice before setup.
+- Completed dark-mode coverage for dashboard surfaces and added sun/moon theme controls.
 - Added the shared TeamBrain repository contract, receipt/decision schemas, and Serena boundaries.
 - Added Windows/POSIX bootstrap, doctor, context, privacy-gated publish, handoff, sync guidance, and update check commands.
 - Preserved manual hook trust and explicit Git network operations.

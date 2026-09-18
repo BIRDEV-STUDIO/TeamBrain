@@ -57,7 +57,12 @@ async function reloadTeams() {
   await loadProject();
 }
 async function loadTeamChat() {
-  state.teamChat = state.team ? await api(`/api/teams/${state.team}/chat`) : [];
+  if (!state.team) { state.teamChat = []; return; }
+  try { state.teamChat = await api(`/api/teams/${state.team}/chat`); }
+  catch (error) {
+    if (error.message === 'Bulunamadı.') { state.teamChat = []; return; }
+    throw error;
+  }
 }
 async function loadProject() {
   const version = ++state.version;

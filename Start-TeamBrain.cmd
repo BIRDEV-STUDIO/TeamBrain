@@ -1,5 +1,6 @@
 @echo off
 cd /d "%~dp0"
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":7340 .*LISTENING"') do taskkill /PID %%P /F >nul 2>&1
 node --version >nul 2>&1
 if errorlevel 1 (
   echo Node.js 22.18 veya daha yeni bir surum gerekli.

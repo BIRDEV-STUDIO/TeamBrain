@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added project-scoped document import for text, CSV/TSV/JSON, DOCX, XLSX/XLSM and PDF files. Readable text is converted to traceable Markdown instead of committing original binary files.
+
 All notable changes are documented here.
 
 ## 0.4.0-rc.1 — 2026-09-18

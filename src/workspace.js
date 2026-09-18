@@ -11,6 +11,7 @@ const { planner, addCalendar, addTask, setTaskStatus } = require('./planner');
 const { parseUrl } = require('./repo-registry');
 const { read: readMembers, refresh: refreshMembers } = require('./team-members');
 const { read: readChat, append: appendChat, migrateLegacy: migrateLegacyChat } = require('./chat-store');
+const { importDocument, listDocuments } = require('./document-import');
 
 function label(value) {
   if (typeof value !== 'string' || !value.trim() || value.length > 100) throw new Error('Ad 1–100 karakter olmalı.');
@@ -104,7 +105,7 @@ class Workspace {
         chat,
         total: db.prepare('SELECT count(*) AS total FROM events').get().total + chat.length,
         sync: connection.github?.sync || 'manual', integrations: 'local', connection, planner: planner(this.projectPath(team, project)),
-        members: this.teams().find(item => item.id === team)?.members || []
+        members: this.teams().find(item => item.id === team)?.members || [], documents: listDocuments(root)
       };
     });
   }
@@ -120,6 +121,7 @@ class Workspace {
     try { const connection=JSON.parse(fs.readFileSync(connectionFile,'utf8')); return { github: { connected:true, remote:connection.remote, actor_id:connection.actor_id, sync:connection.sync, root:cursor }, serena: { configured: fs.existsSync(path.join(root,'.serena','project.yml')) }, avenox: { mode:'manual-export-only' } }; } catch { return { github:{connected:false, error:'connection.json is invalid'}, serena:{configured:false}, avenox:{mode:'manual-export-only'} }; }
   }
   addCalendar(team, project, input) { return this.withProject(team, project, ({ root, config }) => addCalendar(root, input, config.actor_id)); }
+  importDocument(team, project, input) { return this.withProject(team, project, ({ root, config }) => importDocument(root, { ...input, project_id: config.project_id })); }
   addTask(team, project, input) { return this.withProject(team, project, ({ root, config }) => addTask(root, input, config.actor_id)); }
   setTaskStatus(team, project, task, status) { return this.withProject(team, project, ({ root, config }) => setTaskStatus(root, task, status, config.actor_id)); }
   addEvent(team, project, input) {

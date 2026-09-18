@@ -115,6 +115,7 @@ function renderShell(data, decisions) {
   $('profile').textContent = (data?.actor || 'Y').slice(0, 1).toUpperCase();
   $('profile').title = data?.actor || 'Yerel kullanıcı';
   $('new-event').disabled = !data;
+  $('upload-document').disabled = !data;
   $('hero').hidden = state.view !== 'overview';
   $('hero-action').textContent = !state.team ? 'İlk ekibini oluştur ↗' : !state.project ? 'İlk projeni oluştur ↗' : 'Bir karar kaydet ↗';
   $('metrics').hidden = !data || state.view === 'integrations' || state.view === 'chat';
@@ -266,6 +267,17 @@ $('content').addEventListener('click', async e => {  const calendarNav = e.targe
   if (action === 'reindex') { try { const result = await api(base() + '/reindex', {}); toast(`${result.indexed} kayıt indekslendi.`); await loadProject(); } catch (error) { toast(error.message); } }
 });
 $('add-team').onclick = () => editor('team');
+$('upload-document').onclick = () => $('document-file').click();
+$('document-file').addEventListener('change', async event => {
+  const file = event.target.files?.[0]; if (!file || !state.team || !state.project) return;
+  const form = new FormData(); form.append('file', file);
+  $('upload-document').disabled = true;
+  try {
+    const response = await fetch(`/api/teams/${state.team}/projects/${state.project}/documents`, { method: 'POST', body: form });
+    const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Belge yüklenemedi.');
+    toast(`Belge Markdown olarak kaydedildi: ${result.filename}`); await loadProject();
+  } catch (error) { toast(error.message); } finally { event.target.value = ''; $('upload-document')?.removeAttribute('disabled'); }
+});
 $('add-project').onclick = () => editor('project');
 $('new-event').onclick = () => editor('event');
 $('hero-action').onclick = () => editor(!state.team ? 'team' : !state.project ? 'project' : 'event');

@@ -21,6 +21,13 @@ async function jsonBody(req) {
   if (!data || Array.isArray(data) || typeof data !== 'object') throw new Error('JSON object required');
   return data;
 }
+async function multipartBody(req) {
+  const type = req.headers['content-type'] || ''; const match = type.match(/boundary=(?:(?:"([^"]+)")|([^;]+))/i); if (!match) throw new Error('Dosya formu geçersiz.');
+  const chunks = []; let size = 0; for await (const chunk of req) { size += chunk.length; if (size > 16 * 1024 * 1024) throw new Error('Dosya 15 MB sınırını aşamaz.'); chunks.push(chunk); }
+  const body = Buffer.concat(chunks); const boundary = Buffer.from(`--${match[1] || match[2]}`); const start = body.indexOf(boundary); const headerEnd = body.indexOf(Buffer.from('\r\n\r\n'), start); const end = body.indexOf(boundary, headerEnd + 4); if (start < 0 || headerEnd < 0 || end < 0) throw new Error('Dosya bulunamadı.');
+  const headers = body.slice(start + boundary.length + 2, headerEnd).toString('utf8'); const name = headers.match(/name="([^"]+)"/i)?.[1]; const filename = headers.match(/filename="([^"]*)"/i)?.[1]; if (name !== 'file' || !filename) throw new Error('Dosya bulunamadı.');
+  return { filename: path.basename(filename), data: body.slice(headerEnd + 4, end - 2) };
+}
 function createDashboardServer(root) {
   const workspace = new Workspace(root);
   const syncWorker=new SyncWorker(root); syncWorker.start();
@@ -52,6 +59,7 @@ function createDashboardServer(root) {
         if (req.method === 'GET') { send(200, workspace.teams().find(team => team.id === parts[2])?.members || []); return; }
         if (req.method === 'POST') { await jsonBody(req); send(200, await withSync(workspace.refreshTeamMembers(parts[2]))); return; }
       }
+      if (parts[0] === 'api' && parts[1] === 'teams' && parts[3] === 'projects' && parts[5] === 'documents' && req.method === 'POST') { send(201, await withSync(workspace.importDocument(parts[2], parts[4], await multipartBody(req)))); return; }
       if (parts[0] === 'api' && parts[1] === 'teams' && parts[3] === 'projects') {
         const team = parts[2], project = parts[4], operation = parts[5];
         if (!project && req.method === 'POST') { send(201, await withSync(workspace.createProject(team, (await jsonBody(req)).name))); return; }

@@ -89,6 +89,8 @@ The `actor` value is the stable member identity in receipts and handoffs; never 
 
 The dashboard can create a team directly from `＋ Ekip oluştur`. Enter the team's exact GitHub repository URL; TeamBrain verifies that the repository is reachable, derives the team name when it is left blank, prevents the same repository from being linked twice, and stores the link in the team's metadata. All projects and chat messages created under that team remain isolated under that GitHub-backed team workspace. The repository must already exist and the current user must have Git access; TeamBrain does not silently create repositories or bypass GitHub permissions.
 
+Use `＋ Belge yükle` inside a selected project to import TXT, Markdown, CSV/TSV, JSON, DOCX, XLSX/XLSM or PDF files. TeamBrain extracts their readable text and saves a traceable Markdown copy under `memory/knowledge/imports/`; the original binary is not committed by default, which keeps the GitHub memory repository reviewable and small. Imports are included in the selected memory repository's automatic sync. Do not upload secrets or personal data without reviewing the extracted text first. Files are limited to 15 MB; `.xls` is not supported yet.
+
 ### Multiple GitHub memory repositories
 
 Use a separate workspace registry when one user belongs to multiple teams or projects:

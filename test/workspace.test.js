@@ -57,6 +57,20 @@ test('team chat is isolated from project chat and Obsidian event markdown', () =
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+test('document imports become traceable project Markdown without retaining binaries', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-document-'));
+  try {
+    const w = new Workspace(root), team = w.createTeam('Studio'), project = w.createProject(team.id, 'Robot');
+    const result = w.importDocument(team.id, project.id, { filename: 'spec.txt', data: Buffer.from('Motor kararları') });
+    assert.match(result.file, /memory\/knowledge\/imports\/.*spec\.md$/);
+    const markdown = fs.readFileSync(path.join(w.projectPath(team.id, project.id), result.file), 'utf8');
+    assert.match(markdown, /source_filename: "spec\.txt"/);
+    assert.match(markdown, /Motor kararları/);
+    assert.equal(w.snapshot(team.id, project.id).documents.length, 1);
+    assert.throws(() => w.importDocument(team.id, project.id, { filename: 'secret.exe', data: Buffer.from('x') }), /desteklenmiyor/i);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('project snapshots inherit the GitHub connection from the memory workspace root', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-connection-'));
   try {

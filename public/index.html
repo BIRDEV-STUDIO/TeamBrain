@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>TeamBrain · Ekip hafızası</title>
-  <style>.update-notice{margin:0 0 18px;padding:13px 16px;border:1px solid #b8d98a;border-radius:12px;background:#eff8df;color:#294c37;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:12px}.update-notice[hidden]{display:none}.update-notice a{color:inherit;font-weight:700}.update-notice button{border:0;background:transparent;color:inherit;cursor:pointer;font-size:18px;line-height:1;padding:0 2px}:root.dark .update-notice{background:#30452f;color:#e2f0d7;border-color:#5f8350}</style>
+  <style>.page-actions{display:flex;align-items:center;gap:8px}.update-notice{margin:0 0 18px;padding:13px 16px;border:1px solid #b8d98a;border-radius:12px;background:#eff8df;color:#294c37;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:12px}.update-notice[hidden]{display:none}.update-notice a{color:inherit;font-weight:700}.update-notice button{border:0;background:transparent;color:inherit;cursor:pointer;font-size:18px;line-height:1;padding:0 2px}:root.dark .update-notice{background:#30452f;color:#e2f0d7;border-color:#5f8350}</style>
   <link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script>
 </head>
 <body>
@@ -29,7 +29,7 @@
     <header class="topbar"><div id="breadcrumb">Çalışma alanı</div><div class="top-actions"><span class="local-badge">● Yerel çalışma</span><button class="theme-toggle" id="theme-toggle" type="button" title="Koyu modu aç/kapat" aria-label="Koyu modu aç/kapat">◐</button><button class="avatar" id="profile" title="Yerel kullanıcı">E</button></div></header>
     <main>
       <div id="update-notice" class="update-notice" hidden role="status"></div>
-      <div class="page-heading"><div><div class="eyebrow" id="date"></div><h1 id="heading">Ekibinin ortak hafızası.</h1><p id="subtitle">Kararlar, çalışmalar ve onları birbirine bağlayan nedenler.</p></div><button class="primary" id="new-event">＋ Yeni kayıt</button></div>
+      <div class="page-heading"><div><div class="eyebrow" id="date"></div><h1 id="heading">Ekibinin ortak hafızası.</h1><p id="subtitle">Kararlar, çalışmalar ve onları birbirine bağlayan nedenler.</p></div><div class="page-actions"><button class="secondary" id="upload-document" type="button">＋ Belge yükle</button><input id="document-file" type="file" hidden accept=".txt,.md,.csv,.tsv,.json,.log,.docx,.xlsx,.xlsm,.pdf"><button class="primary" id="new-event">＋ Yeni kayıt</button></div></div>
       <section id="hero" class="hero"><div><span class="eyebrow">BİRLİKTE ÜRET. BAĞLAMI KORU.</span><h2>İyi fikirler kaybolmasın.</h2><p>Ne yaptığınızı, neden yaptığınızı ve sırada ne olduğunu<br>aynı yerden takip edin.</p><button id="hero-action" class="hero-button">İlk projeni oluştur <span>↗</span></button></div><div class="orbit-art" aria-hidden="true"><div class="orbit o1"></div><div class="orbit o2"></div><div class="orbit o3"></div><span class="orbit-center">✳</span><span class="orbit-tag tag1">fikir</span><span class="orbit-tag tag2">karar</span><span class="orbit-tag tag3">bağlam</span></div></section>
       <section id="metrics" class="metrics"></section>
       <div id="content"></div>

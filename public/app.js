@@ -164,6 +164,12 @@ function renderChat() {
   const history = $('chat-history');
   history.scrollTop = history.scrollHeight;
   $('chat-form').addEventListener('submit', submitChat);
+  $('chat-message').addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      $('chat-form').requestSubmit();
+    }
+  });
 }
 function chatBubble(event) {
   const reply = event.event_type === 'chat.reply.generated';

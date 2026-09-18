@@ -37,10 +37,23 @@ test('workspace chat persists messages as project-scoped canonical events', () =
     assert.equal(chat.reply.causation_id, chat.user.event_id);
     assert.match(chat.reply.body, /Use Git memory|son bağlam|yerel kayıt/i);
     assert.equal(w.snapshot(team.id, robot.id).events.filter(e => e.event_type.startsWith('chat.')).length, 2);
-    assert.equal(fs.existsSync(path.join(w.projectPath(team.id, robot.id), '.teambrain', 'chat.json')), true);
+    assert.equal(fs.existsSync(path.join(w.projectPath(team.id, robot.id), '.teambrain', 'project-chat', 'messages.json')), true);
     assert.equal(fs.readdirSync(path.join(w.projectPath(team.id, robot.id), 'memory', 'events')).filter(file => file.endsWith('.md')).length, 0, 'chat must not create Obsidian-facing event markdown');
     assert.equal(w.snapshot(team.id, web.id).events.length, 0);
     assert.throws(() => w.chat(team.id, robot.id, { message: ' ' }));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('team chat is isolated from project chat and Obsidian event markdown', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-team-chat-'));
+  try {
+    const w = new Workspace(root), team = w.createTeam('Studio'), project = w.createProject(team.id, 'Robot');
+    const message = w.teamChat(team.id, { message: 'Ekip toplantısı 15:00', actor: 'ada' });
+    assert.equal(message.actor_id, 'ada');
+    assert.equal(w.teamChatSnapshot(team.id).length, 1);
+    assert.equal(w.snapshot(team.id, project.id).chat.length, 0);
+    assert.equal(fs.existsSync(path.join(root, 'teams', team.id, '.teambrain', 'team-chat', 'messages.json')), true);
+    assert.equal(fs.readdirSync(path.join(w.projectPath(team.id, project.id), 'memory', 'events')).filter(file => file.endsWith('.md')).length, 0);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

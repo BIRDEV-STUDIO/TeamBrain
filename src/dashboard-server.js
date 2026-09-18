@@ -42,6 +42,10 @@ function createDashboardServer(root) {
         if (req.method === 'POST') { const input = await jsonBody(req); send(201, await withSync(workspace.createTeam(input.name, input.github_url))); return; }
       }
       const parts = url.pathname.split('/').filter(Boolean);
+      if (parts[0] === 'api' && parts[1] === 'teams' && parts[3] === 'chat') {
+        if (req.method === 'GET') { send(200, workspace.teamChatSnapshot(parts[2])); return; }
+        if (req.method === 'POST') { const input = await jsonBody(req); send(201, await withSync(workspace.teamChat(parts[2], input))); return; }
+      }
       if (parts[0] === 'api' && parts[1] === 'teams' && parts[3] === 'members') {
         if (req.method === 'GET') { send(200, workspace.teams().find(team => team.id === parts[2])?.members || []); return; }
         if (req.method === 'POST') { await jsonBody(req); send(200, await withSync(workspace.refreshTeamMembers(parts[2]))); return; }

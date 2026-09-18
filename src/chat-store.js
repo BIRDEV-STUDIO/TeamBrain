@@ -2,23 +2,25 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-function file(root) { return path.join(root, '.teambrain', 'chat.json'); }
-function read(root) {
+function file(root, scope = 'project') { return path.join(root, '.teambrain', scope === 'team' ? 'team-chat' : 'project-chat', 'messages.json'); }
+function read(root, scope = 'project') {
   try {
-    const data = JSON.parse(fs.readFileSync(file(root), 'utf8'));
+    const target = file(root, scope);
+    const legacy = scope === 'project' ? path.join(root, '.teambrain', 'chat.json') : null;
+    const data = JSON.parse(fs.readFileSync(fs.existsSync(target) ? target : legacy, 'utf8'));
     return { schema_version: 1, messages: Array.isArray(data.messages) ? data.messages : [] };
   } catch { return { schema_version: 1, messages: [] }; }
 }
-function save(root, data) {
-  const target = file(root), temp = `${target}.${process.pid}.tmp`;
+function save(root, data, scope = 'project') {
+  const target = file(root, scope), temp = `${target}.${process.pid}.tmp`;
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(temp, JSON.stringify(data, null, 2) + '\n');
   fs.renameSync(temp, target);
 }
-function append(root, event) {
-  const data = read(root);
+function append(root, event, scope = 'project') {
+  const data = read(root, scope);
   data.messages.push(event);
-  save(root, data);
+  save(root, data, scope);
   return event;
 }
 function migrateLegacy(root, db) {

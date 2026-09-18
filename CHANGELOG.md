@@ -5,6 +5,7 @@ All notable changes are documented here.
 ## 0.4.0-rc.1 — 2026-09-18
 
 - Moved team chat into the hidden project `.teambrain` area so it syncs to GitHub without appearing as normal Obsidian knowledge.
+- Added an explicit Ekip sohbeti / Proje sohbeti switch; team messages and project-context messages now use separate hidden folders.
 - Added an interactive GitHub connection wizard that confirms the repository, local destination, actor identity, and automatic-sync choice before setup.
 - Completed dark-mode coverage for dashboard surfaces and added sun/moon theme controls.
 - Added a GitHub-backed Ekip view, cached member refresh, member-select task assignment, and terminal `tasks` context for assigned work.

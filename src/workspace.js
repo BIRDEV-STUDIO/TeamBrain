@@ -166,6 +166,18 @@ class Workspace {
       return { user: userEvent, reply: replyEvent };
     });
   }
+  teamChat(team, input) {
+    const text = message(input.message), base = this.teamPath(team);
+    if (!this.teams().some(item => item.id === team)) throw new Error('Ekip bulunamadı.');
+    const actor = input.actor || process.env.USERNAME || process.env.USER || 'unknown';
+    const event = createEvent({ title: text.slice(0, 120), body: text, eventType: 'chat.message', source: 'team-dashboard-chat', actorId: actor, deviceId: 'team-chat' }, { project_id: `team:${team}`, actor_id: actor, device_id: 'team-chat' });
+    appendChat(base, event, 'team');
+    return event;
+  }
+  teamChatSnapshot(team) {
+    if (!this.teams().some(item => item.id === team)) throw new Error('Ekip bulunamadı.');
+    return readChat(this.teamPath(team), 'team').messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  }
   chain(team, project, event) { return this.withProject(team, project, ({ db }) => eventChain(db, event)); }
   reindex(team, project) {
     return this.withProject(team, project, ({ root, config, db }) => {

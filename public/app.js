@@ -1,7 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const state = { teams: [], team: null, project: null, snapshot: null, view: 'overview', calendarCursor: new Date(), query: '', type: '', mode: null, version: 0 };
+const state = { teams: [], team: null, project: null, snapshot: null, teamChat: [], chatScope: 'team', view: 'overview', calendarCursor: new Date(), query: '', type: '', mode: null, version: 0 };
 const names = {
   'note.created': 'Not',
   'issue.detected': 'Sorun',
@@ -40,7 +40,7 @@ function toast(message) {
 function base() { return `/api/teams/${state.team}/projects/${state.project}`; }
 function team() { return state.teams.find(t => t.id === state.team); }
 function events() { return state.snapshot?.events || []; }
-function chatEvents() { return events().filter(e => e.event_type === 'chat.message' || e.event_type === 'chat.reply.generated').reverse(); }
+function chatEvents() { return state.chatScope === 'team' ? state.teamChat : events().filter(e => e.event_type === 'chat.message' || e.event_type === 'chat.reply.generated').reverse(); }
 
 function choose() {
   $('team').innerHTML = state.teams.length ? state.teams.map(t => `<option value="${escape(t.id)}">${escape(t.name)}</option>`).join('') : '<option>Henüz ekip yok</option>';
@@ -53,7 +53,11 @@ async function reloadTeams() {
   if (!team()) state.team = state.teams[0]?.id || null;
   if (!team()?.projects.some(p => p.id === state.project)) state.project = team()?.projects[0]?.id || null;
   choose();
+  await loadTeamChat();
   await loadProject();
+}
+async function loadTeamChat() {
+  state.teamChat = state.team ? await api(`/api/teams/${state.team}/chat`) : [];
 }
 async function loadProject() {
   const version = ++state.version;
@@ -133,6 +137,7 @@ function render() {
   const decisions = events().filter(e => e.event_type.startsWith('decision.'));
   renderShell(data, decisions);
   if (state.view === 'team') { renderTeam(); return; }
+  if (state.view === 'chat' && !state.project) { renderChat(); return; }
   if (!state.project) {
     $('content').innerHTML = `<section class="panel">${empty(state.team ? 'Bu ekibin ilk projesini ekle.' : 'Ortak beyni bağla ve ekibini başlat.', state.team ? 'Her projenin kayıtları ayrı tutulur.' : 'Önce Bağlantılar sekmesinde GitHub memory repo durumunu kontrol et. Sonra ekip ve proje oluştur. Üyeler aynı memory repo’yu kendi actor kimlikleriyle kullanır.', { id: state.team ? 'project' : 'team', text: state.team ? '＋ Proje oluştur' : '＋ Ekip oluştur' })}</section>`;
     return;
@@ -157,13 +162,15 @@ function renderOverview(decisions) {
 }
 function renderChat() {
   const messages = chatEvents();
-  const github = state.snapshot.connection?.github;
-  const sharing = github?.connected ? (github.sync === 'background' ? 'GitHub’a otomatik gönderiliyor' : 'GitHub’a manuel senkron bekliyor') : 'GitHub bağlantısı kurulmadı';
+  const github = state.snapshot?.connection?.github;
+  const sharing = github?.connected ? (github.sync === 'background' ? 'GitHub’a otomatik gönderiliyor' : 'GitHub’a manuel senkron bekliyor') : team()?.github_repo ? 'GitHub memory reposuna bağlı' : 'GitHub bağlantısı kurulmadı';
   const privacy = 'Ekip içi sohbet; Obsidian bilgi kayıtlarına dahil edilmez.';
-  $('content').innerHTML = `<section class="chat-panel"><div class="chat-history" id="chat-history"><div class="panel-head chat-context"><strong>Seçili proje ekip sohbeti</strong><small>${escape(sharing)} · ${privacy}</small></div>${messages.map(chatBubble).join('') || empty('Bu projede sohbet yok.', 'Ekip arkadaşlarına mesaj bırak. Sohbet yalnızca bu projenin gizli TeamBrain sohbet alanında tutulur.')}</div><form id="chat-form" class="chat-composer"><label class="sr-only" for="chat-message">Mesaj</label><textarea id="chat-message" name="message" maxlength="50000" placeholder="Ekip arkadaşlarına mesaj yaz…"></textarea><button class="primary" id="send-chat">Gönder</button></form></section><div class="link-status">${privacy} Mesajlar seçili projeye ve gönderen kişinin TeamBrain kimliğine bağlıdır. ${escape(sharing)}.</div>`;
+  const scopeButtons = `<div class="calendar-actions chat-switch" role="group" aria-label="Sohbet alanı"><button class="${state.chatScope === 'team' ? 'primary' : 'secondary'}" type="button" data-chat-scope="team">Ekip sohbeti</button><button class="${state.chatScope === 'project' ? 'primary' : 'secondary'}" type="button" data-chat-scope="project">Proje sohbeti</button></div>`;
+  $('content').innerHTML = `<section class="chat-panel"><div class="chat-history" id="chat-history"><div class="panel-head chat-context"><div><strong>${state.chatScope === 'team' ? 'Ekip sohbeti' : 'Proje sohbeti'}</strong><small>${state.chatScope === 'team' ? 'Tüm ekip üyeleriyle ortak konuşma' : 'Yalnızca seçili projenin bağlamı'} · ${escape(sharing)} · ${privacy}</small></div>${scopeButtons}</div>${messages.map(chatBubble).join('') || empty(state.chatScope === 'team' ? 'Ekip sohbeti henüz boş.' : 'Bu projede sohbet yok.', state.chatScope === 'team' ? 'Ekip arkadaşlarına ilk mesajı bırak.' : 'Proje bağlamı hakkında soru sor veya not bırak.')}</div><form id="chat-form" class="chat-composer"><label class="sr-only" for="chat-message">Mesaj</label><textarea id="chat-message" name="message" maxlength="50000" placeholder="${state.chatScope === 'team' ? 'Ekip arkadaşlarına mesaj yaz…' : 'Bu projenin bağlamını sor…'}"></textarea><button class="primary" id="send-chat">Gönder</button></form></section><div class="link-status">${privacy} ${state.chatScope === 'team' ? 'Ekip sohbeti ayrı team-chat klasöründe tutulur.' : 'Proje sohbeti ayrı project-chat klasöründe tutulur.'} ${escape(sharing)}.</div>`;
   const history = $('chat-history');
   history.scrollTop = history.scrollHeight;
   $('chat-form').addEventListener('submit', submitChat);
+  document.querySelectorAll('[data-chat-scope]').forEach(button => button.addEventListener('click', async () => { state.chatScope = button.dataset.chatScope; if (state.chatScope === 'team') await loadTeamChat(); render(); }));
   $('chat-message').addEventListener('keydown', event => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -182,7 +189,8 @@ async function submitChat(event) {
   if (!String(message || '').trim()) return;
   $('send-chat').disabled = true;
   try {
-    await api(base() + '/chat', { message });
+    if (state.chatScope === 'team') { await api(`/api/teams/${state.team}/chat`, { message, actor: state.snapshot?.actor }); await loadTeamChat(); render(); }
+    else await api(base() + '/chat', { message });
     form.reset();
     await loadProject();
   } catch (error) {
@@ -227,7 +235,7 @@ async function detail(eventId) {
     $('chain').textContent = error.message;
   }
 }
-$('team').addEventListener('change', async e => { state.team = e.target.value; state.project = team()?.projects[0]?.id || null; state.query = ''; choose(); await loadProject(); });
+$('team').addEventListener('change', async e => { state.team = e.target.value; state.project = team()?.projects[0]?.id || null; state.query = ''; choose(); await loadTeamChat(); await loadProject(); });
 $('projects').addEventListener('click', async e => { const b = e.target.closest('[data-project]'); if (b) { state.project = b.dataset.project; state.query = ''; state.type = ''; choose(); await loadProject(); } });
 $('nav').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) { state.view = b.dataset.view; state.query = ''; state.type = ''; render(); } });
 $('content').addEventListener('click', async e => {  const calendarNav = e.target.closest('[data-calendar-nav]')?.dataset.calendarNav;

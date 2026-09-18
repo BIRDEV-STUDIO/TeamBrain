@@ -113,7 +113,7 @@ npm test
 
 ## Implemented and pending
 
-Implemented: multi-team/multi-project workspace UI, project-isolated event creation, hidden project-scoped team chat synced through the GitHub memory repository, activity filtering, causal detail view, deterministic daily view, SQLite rebuild, JSON API, GitHub memory connection, opt-in background sync, and conflict pause state.
+Implemented: multi-team/multi-project workspace UI, project-isolated event creation, separate team and project chats synced through the GitHub memory repository, activity filtering, causal detail view, deterministic daily view, SQLite rebuild, JSON API, GitHub memory connection, opt-in background sync, and conflict pause state.
 
 The Ekip view reads the connected GitHub repository's collaborator/contributor list into a project-isolated member cache. Tasks use those GitHub logins when available. Open tasks are stored in the selected project's shared TeamBrain workspace; a terminal agent can run `teambrain tasks --root <memory-root>` to announce tasks assigned to its actor identity after GitHub synchronization.
 

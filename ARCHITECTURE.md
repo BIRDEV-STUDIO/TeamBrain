@@ -53,7 +53,7 @@ Daily summaries are generated views derived from event documents and may be rege
 
 ## Chat
 
-The dashboard chat is a project-scoped team chat. Messages are persisted in the project's hidden `.teambrain/chat.json`, not as Obsidian-facing Markdown records; legacy chat event files are migrated into `.teambrain/chat-archive/` when the project is opened. The `teams/` sync scope sends this chat file to the connected GitHub memory repository, while normal Obsidian views remain focused on reviewed knowledge and decisions. TeamBrain's current local assistant reply is also stored in the hidden chat store with `causation_id` pointing to the message that caused it.
+The dashboard has two chat scopes: `team-chat/messages.json` for the shared team room and `project-chat/messages.json` for the selected project's context. Both live under hidden `.teambrain` directories, never as Obsidian-facing Markdown records. Legacy project chat event files are migrated into `.teambrain/chat-archive/` when the project is opened. The `teams/` sync scope sends both chat areas to the connected GitHub memory repository, while normal Obsidian views remain focused on reviewed knowledge and decisions. Project chat may include TeamBrain's local assistant reply; team chat is a human team room and does not inject project-context replies.
 
 ## Dashboard and deployment
 

@@ -23,6 +23,7 @@ async function jsonBody(req) {
 function createDashboardServer(root) {
   const workspace = new Workspace(root);
   const syncWorker=new SyncWorker(root); syncWorker.start();
+  const withSync = async result => ({ ...result, sync: await syncWorker.tick() });
   const server=http.createServer(async (req, res) => {
     const send = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); };
     res.setHeader('Cache-Control', 'no-store');
@@ -38,24 +39,24 @@ function createDashboardServer(root) {
       }
       if (url.pathname === '/api/teams') {
         if (req.method === 'GET') { send(200, workspace.teams()); return; }
-        if (req.method === 'POST') { const input = await jsonBody(req); send(201, workspace.createTeam(input.name, input.github_url)); return; }
+        if (req.method === 'POST') { const input = await jsonBody(req); send(201, await withSync(workspace.createTeam(input.name, input.github_url))); return; }
       }
       const parts = url.pathname.split('/').filter(Boolean);
       if (parts[0] === 'api' && parts[1] === 'teams' && parts[3] === 'members') {
         if (req.method === 'GET') { send(200, workspace.teams().find(team => team.id === parts[2])?.members || []); return; }
-        if (req.method === 'POST') { await jsonBody(req); send(200, workspace.refreshTeamMembers(parts[2])); return; }
+        if (req.method === 'POST') { await jsonBody(req); send(200, await withSync(workspace.refreshTeamMembers(parts[2]))); return; }
       }
       if (parts[0] === 'api' && parts[1] === 'teams' && parts[3] === 'projects') {
         const team = parts[2], project = parts[4], operation = parts[5];
-        if (!project && req.method === 'POST') { send(201, workspace.createProject(team, (await jsonBody(req)).name)); return; }
+        if (!project && req.method === 'POST') { send(201, await withSync(workspace.createProject(team, (await jsonBody(req)).name))); return; }
         if (project && !operation && req.method === 'GET') { send(200, workspace.snapshot(team, project)); return; }
-        if (project && operation === 'events' && req.method === 'POST') { send(201, workspace.addEvent(team, project, await jsonBody(req))); return; }
-        if (project && operation === 'chat' && req.method === 'POST') { send(201, workspace.chat(team, project, await jsonBody(req))); return; }
+        if (project && operation === 'events' && req.method === 'POST') { send(201, await withSync(workspace.addEvent(team, project, await jsonBody(req)))); return; }
+        if (project && operation === 'chat' && req.method === 'POST') { send(201, await withSync(workspace.chat(team, project, await jsonBody(req)))); return; }
         if (project && operation === 'chain' && req.method === 'GET') { send(200, workspace.chain(team, project, url.searchParams.get('event'))); return; }
         if (project && operation === 'reindex' && req.method === 'POST') { await jsonBody(req); send(200, workspace.reindex(team, project)); return; }
-        if (project && operation === 'calendar' && req.method === 'POST') { send(201, workspace.addCalendar(team, project, await jsonBody(req))); return; }
-        if (project && operation === 'tasks' && req.method === 'POST') { send(201, workspace.addTask(team, project, await jsonBody(req))); return; }
-        if (project && operation === 'tasks' && parts[6] && req.method === 'PATCH') { const input = await jsonBody(req); send(200, workspace.setTaskStatus(team, project, parts[6], input.status)); return; }
+        if (project && operation === 'calendar' && req.method === 'POST') { send(201, await withSync(workspace.addCalendar(team, project, await jsonBody(req)))); return; }
+        if (project && operation === 'tasks' && req.method === 'POST') { send(201, await withSync(workspace.addTask(team, project, await jsonBody(req)))); return; }
+        if (project && operation === 'tasks' && parts[6] && req.method === 'PATCH') { const input = await jsonBody(req); send(200, await withSync(workspace.setTaskStatus(team, project, parts[6], input.status))); return; }
       }
       send(404, { error: 'Bulunamadı.' });
     } catch (error) { send(400, { error: error.message }); }

@@ -26,4 +26,6 @@ You can also create a team from the dashboard. Select `＋ Ekip oluştur`, paste
 
 For multiple memory repositories, use `repo add` with one workspace. Each repository is isolated by owner/name, remote, index, connection file, and member list. TeamBrain never merges records across repositories.
 
+The dashboard's `Ekip` area refreshes the connected repository's GitHub members. When creating a task, choose a member from that list. The assignee is stored as the person's GitHub login, so the task remains unambiguous across machines. After automatic synchronization, the assigned member's terminal agent can run `teambrain tasks --root C:\TeamBrain-memory` and report open tasks.
+
 The public application repository contains the client and protocol. It never receives your private memory, AI transcripts, AvenoxBeyin vault, or credentials.

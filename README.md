@@ -61,6 +61,7 @@ node bin/teambrain.js bootstrap --root C:\TeamBrain --project robotics
 node bin/teambrain.js doctor --root C:\TeamBrain
 node bin/teambrain.js sync --root C:\TeamBrain
 node bin/teambrain.js context --root C:\TeamBrain
+node bin/teambrain.js tasks --root C:\TeamBrain-memory
 node bin/teambrain.js connect github --url https://github.com/ORG/TEAM-MEMORY.git --memory-root C:\TeamBrain-memory --actor gecekodu
 node bin/teambrain.js github create-memory --owner YOUR-ORG --name teambrain-memory --visibility private --memory-root C:\TeamBrain-memory --actor YOUR_GITHUB_LOGIN
 node bin/teambrain.js connect project --repo C:\path\to\your\code --memory-root C:\TeamBrain-memory --team TEAM_ID --project PROJECT_ID --actor YOUR_GITHUB_LOGIN
@@ -113,6 +114,8 @@ npm test
 ## Implemented and pending
 
 Implemented: multi-team/multi-project workspace UI, project-isolated event creation, local project chat persisted as canonical events, activity filtering, causal detail view, deterministic daily view, SQLite rebuild, JSON API, GitHub memory connection, opt-in background sync, and conflict pause state.
+
+The Ekip view reads the connected GitHub repository's collaborator/contributor list into a project-isolated member cache. Tasks use those GitHub logins when available. Open tasks are stored in the selected project's shared TeamBrain workspace; a terminal agent can run `teambrain tasks --root <memory-root>` to announce tasks assigned to its actor identity after GitHub synchronization.
 
 Pending: GitHub invitation automation and membership authorization, live AI/MCP chat providers, verified Avenox imports, native desktop packaging, and a richer conflict-resolution UI. The dashboard reports these limitations explicitly.
 

@@ -9,6 +9,7 @@ const { writeEvent, readEvent, listEventFiles } = require('./store');
 const { openIndex, indexEvent, timeline, eventChain, why } = require('./index');
 const { planner, addCalendar, addTask, setTaskStatus } = require('./planner');
 const { parseUrl } = require('./repo-registry');
+const { read: readMembers, refresh: refreshMembers } = require('./team-members');
 
 function label(value) {
   if (typeof value !== 'string' || !value.trim() || value.length > 100) throw new Error('Ad 1–100 karakter olmalı.');
@@ -50,7 +51,8 @@ class Workspace {
         return { id: project, name: config.project_name || config.project_id };
       });
       if (legacy) projects.unshift({ id: 'legacy', name: 'Önceki kayıtlar' });
-      return { id: team, name: record.name, github_repo: record.github_repo || null, projects };
+      const memberData = readMembers(base);
+      return { id: team, name: record.name, github_repo: record.github_repo || null, members: memberData.members, members_state: memberData.state || (memberData.members.length ? 'cached' : 'empty'), projects };
     });
   }
   createTeam(name, githubUrl) {
@@ -66,7 +68,14 @@ class Workspace {
     const base = this.teamPath(team);
     fs.mkdirSync(base, { recursive: true });
     fs.writeFileSync(path.join(base, 'team.json'), JSON.stringify({ name, github_repo }, null, 2), { flag: 'wx' });
-    return { id: team, name, github_repo, projects: [] };
+    const memberData = refreshMembers(base, github_repo);
+    return { id: team, name, github_repo, members: memberData.members, members_state: memberData.state, projects: [] };
+  }
+  refreshTeamMembers(team) {
+    const base = this.teamPath(team), meta = path.join(base, 'team.json');
+    if (!fs.existsSync(meta)) throw new Error('Ekip bulunamadı.');
+    const record = JSON.parse(fs.readFileSync(meta, 'utf8'));
+    return refreshMembers(base, record.github_repo);
   }
   createProject(team, name) {
     name = label(name);
@@ -89,6 +98,7 @@ class Workspace {
       events: timeline(db, 1000),
       total: db.prepare('SELECT count(*) AS total FROM events').get().total,
       sync: this.connection(root).github?.sync || 'manual', integrations: 'local', connection: this.connection(root), planner: planner(this.projectPath(team, project))
+      , members: this.teams().find(item => item.id === team)?.members || []
     }));
   }
   connection(root) {

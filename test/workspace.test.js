@@ -50,6 +50,19 @@ test('team creation requires a reachable GitHub repository and stores its identi
   assert.equal(team.github_repo, null);
 });
 
+test('cached GitHub members are exposed to the project and task planner', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-members-'));
+  try {
+    const w = new Workspace(root), team = w.createTeam('Studio'), project = w.createProject(team.id, 'Robot');
+    fs.mkdirSync(path.join(root, 'teams', team.id, '.teambrain'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'teams', team.id, '.teambrain', 'members.json'), JSON.stringify({ members: [{ login: 'ada', name: 'Ada', permissions: { push: true } }] }));
+    const snapshot = w.snapshot(team.id, project.id);
+    assert.equal(snapshot.members[0].login, 'ada');
+    const task = w.addTask(team.id, project.id, { title: 'Review', assignee: 'ada' });
+    assert.equal(task.assignee, 'ada');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('dashboard HTTP onboarding, input checks, security headers and cross-origin protection', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-http-'));
   const server = createDashboardServer(root);
@@ -67,6 +80,9 @@ test('dashboard HTTP onboarding, input checks, security headers and cross-origin
     assert.equal(hostStatus, 403);
     assert.equal((await post('/api/teams', { name: '  ' })).status, 400);
     const team = await (await post('/api/teams', { name: 'Studio' })).json();
+    const members = await fetch(`${base}/api/teams/${team.id}/members`);
+    assert.equal(members.status, 200);
+    assert.deepEqual(await members.json(), []);
     const project = await (await post(`/api/teams/${team.id}/projects`, { name: 'Dashboard' })).json();
     const url = `/api/teams/${team.id}/projects/${project.id}`;
     assert.equal((await post(url + '/events', { event_type: 'note.created', title: { bad: true } })).status, 400);

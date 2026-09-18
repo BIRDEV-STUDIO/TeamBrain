@@ -13,7 +13,7 @@ const names = {
   'chat.message': 'Sohbet mesajı',
   'chat.reply.generated': 'Yerel yanıt'
 };
-const views = { overview: 'Genel bakış', chat: 'Sohbet', activity: 'Aktivite', decisions: 'Karar defteri', calendar: 'Takvim', tasks: 'Görevler', daily: 'Günün özeti', integrations: 'Bağlantılar' };
+const views = { overview: 'Genel bakış', team: 'Ekip', chat: 'Sohbet', activity: 'Aktivite', decisions: 'Karar defteri', calendar: 'Takvim', tasks: 'Görevler', daily: 'Günün özeti', integrations: 'Bağlantılar' };
 const date = value => new Date(value).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
 const time = value => new Date(value).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 const today = new Date().toLocaleDateString('tr-TR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
@@ -107,7 +107,9 @@ function renderShell(data, decisions) {
 function plannerEditor(mode) {
   state.mode = mode; $('form-error').textContent = '';
   $('editor-title').textContent = mode === 'calendar' ? 'Takvime etkinlik ekle' : 'Yeni görev oluştur';
-  $('fields').innerHTML = mode === 'calendar' ? `<label>Etkinlik adı</label><input name="title" maxlength="200" required placeholder="Örn. Sprint planlama"><label>Tarih</label><input name="date" type="date" required><label>Saat</label><input name="time" type="time"><label>Konum veya bağlantı</label><input name="location" maxlength="200" placeholder="Örn. Toplantı odası / bağlantı"><label>Not</label><textarea name="notes" maxlength="2000" placeholder="Ekip için kısa not"></textarea>` : `<label>Görev</label><input name="title" maxlength="200" required placeholder="Örn. Test senaryolarını hazırla"><label>Sorumlu ekip üyesi</label><input name="assignee" maxlength="200" required placeholder="Örn. Emre"><label>Son tarih</label><input name="due_date" type="date"><label>Açıklama</label><textarea name="description" maxlength="2000" placeholder="Beklenen çıktı"></textarea>`;
+  const members = state.snapshot?.members || [];
+  const assignee = members.length ? `<select name="assignee" required><option value="">Ekip üyesi seç</option>${members.map(member => `<option value="${escape(member.login)}">${escape(member.name || member.login)} (@${escape(member.login)})</option>`).join('')}</select>` : `<input name="assignee" maxlength="200" required placeholder="Örn. Emre"><small class="detail-meta">GitHub üyeleri henüz okunamadı; kullanıcı kimliğini elle yazabilirsin.</small>`;
+  $('fields').innerHTML = mode === 'calendar' ? `<label>Etkinlik adı</label><input name="title" maxlength="200" required placeholder="Örn. Sprint planlama"><label>Tarih</label><input name="date" type="date" required><label>Saat</label><input name="time" type="time"><label>Konum veya bağlantı</label><input name="location" maxlength="200" placeholder="Örn. Toplantı odası / bağlantı"><label>Not</label><textarea name="notes" maxlength="2000" placeholder="Ekip için kısa not"></textarea>` : `<label>Görev</label><input name="title" maxlength="200" required placeholder="Örn. Test senaryolarını hazırla"><label>Sorumlu ekip üyesi</label>${assignee}<label>Son tarih</label><input name="due_date" type="date"><label>Açıklama</label><textarea name="description" maxlength="2000" placeholder="Beklenen çıktı"></textarea>`;
   $('editor').showModal(); $('fields').querySelector('input')?.focus();
 }
 function renderCalendar() {
@@ -130,18 +132,25 @@ function render() {
   const data = state.snapshot;
   const decisions = events().filter(e => e.event_type.startsWith('decision.'));
   renderShell(data, decisions);
+  if (state.view === 'team') { renderTeam(); return; }
   if (!state.project) {
     $('content').innerHTML = `<section class="panel">${empty(state.team ? 'Bu ekibin ilk projesini ekle.' : 'Ortak beyni bağla ve ekibini başlat.', state.team ? 'Her projenin kayıtları ayrı tutulur.' : 'Önce Bağlantılar sekmesinde GitHub memory repo durumunu kontrol et. Sonra ekip ve proje oluştur. Üyeler aynı memory repo’yu kendi actor kimlikleriyle kullanır.', { id: state.team ? 'project' : 'team', text: state.team ? '＋ Proje oluştur' : '＋ Ekip oluştur' })}</section>`;
     return;
   }
   if (!data) { $('content').innerHTML = '<div class="panel empty" role="status">Proje yükleniyor…</div>'; return; }
-  if (state.view === 'overview') renderOverview(decisions);
+  if (state.view === 'team') renderTeam();
+  else if (state.view === 'overview') renderOverview(decisions);
   else if (state.view === 'chat') renderChat();
   else if (['activity', 'decisions'].includes(state.view)) renderActivity();
   else if (state.view === 'calendar') renderCalendar();
   else if (state.view === 'tasks') renderTasks();
   else if (state.view === 'daily') renderDaily();
   else renderConnections();
+}
+function renderTeam() {
+  const current = team() || {}, members = current.members || state.snapshot?.members || [], repo = current.github_repo;
+  const status = current.members_state === 'synced' ? 'GitHub’dan güncel' : current.members_state === 'cached' ? 'Yerel önbellek' : 'Üye listesi bekleniyor';
+  $('content').innerHTML = `<div class="connections"><section class="panel connection"><h3>GitHub ekibi</h3><span class="badge">${escape(status)}</span><p>${repo ? `Bağlı repo: <a href="${escape(repo.url)}" target="_blank" rel="noreferrer">${escape(repo.full)}</a>` : 'Bu ekip henüz bir GitHub memory reposuna bağlanmadı.'}</p><button class="secondary" data-action="refresh-members" ${repo ? '' : 'disabled'}>Üyeleri yenile</button></section><section class="panel connection"><h3>Ekip üyeleri</h3><span class="badge">${members.length} kişi</span><p>${members.length ? 'GitHub reposundaki erişimi olan kişiler aşağıda listelenir.' : 'Üyeler görünmüyorsa GitHub erişimini ve gh oturumunu kontrol edip yenile.'}</p></section></div><section class="panel member-list"><div class="panel-head"><h2>Üyeler</h2><span class="record-meta">Görev atamalarında kullanılabilir</span></div><div class="feed">${members.map(member => `<div class="record member-row"><span class="record-icon">●</span><span class="record-main"><span class="record-title">${escape(member.name || member.login)}</span><span class="record-meta">@${escape(member.login)}${member.permissions?.admin ? ' · yönetici' : ''}</span></span></div>`).join('') || empty('Henüz üye görünmüyor.', 'GitHub reposundaki üyeleri çekmek için Üyeleri yenile düğmesine bas.')}</div></section>`;
 }
 function renderOverview(decisions) {
   $('content').innerHTML = `<div class="content-grid"><section class="panel"><div class="panel-head"><h2>Son hareketler</h2><button class="text-button" data-action="activity">Tümünü gör ↗</button></div><div class="feed">${events().filter(e => !e.event_type.startsWith('chat.')).slice(0, 5).map(record).join('') || empty('İlk kaydınla hikâye başlasın.', 'Bir gelişme, fikir veya karar ekle.', { id: 'event', text: 'Yeni kayıt' })}</div></section><section class="panel"><div class="panel-head"><h2>Karar defteri</h2><span>◇</span></div>${decisions.slice(0, 3).map(e => `<button class="decision-card" data-event="${escape(e.event_id)}"><span class="badge">${escape(names[e.event_type] || 'Karar')}</span><h3>${escape(e.title)}</h3><span class="record-meta">${date(e.created_at)} · Gerekçeyi aç ↗</span></button>`).join('') || empty('Nedenini de hatırla.', 'Aldığınız kararları gerekçesiyle kaydedin.')}</section></div><div class="link-status">◉ &nbsp; Kayıtlar bu bilgisayarda saklanıyor. Sohbet dahil tüm proje hafızası yerel event olarak tutulur.</div>`;
@@ -223,6 +232,7 @@ $('content').addEventListener('click', async e => {  const calendarNav = e.targe
   if (action === 'calendar' || action === 'task') plannerEditor(action);
   if (action === 'activity') { state.view = 'activity'; render(); }
   if (action === 'refresh') await loadProject();
+  if (action === 'refresh-members') { try { const result = await api(`/api/teams/${state.team}/members`, {}, 'POST'); toast(`${result.members.length} GitHub üyesi güncellendi.`); await reloadTeams(); } catch (error) { toast(error.message); } }
   const taskButton = e.target.closest('[data-task]');
   if (taskButton) { try { await api(base() + '/tasks/' + encodeURIComponent(taskButton.dataset.task), { status: taskButton.closest('.task-item').classList.contains('done') ? 'open' : 'done' }, 'PATCH'); await loadProject(); } catch (error) { toast(error.message); } return; }
   if (action === 'reindex') { try { const result = await api(base() + '/reindex', {}); toast(`${result.indexed} kayıt indekslendi.`); await loadProject(); } catch (error) { toast(error.message); } }

@@ -41,6 +41,10 @@ function createDashboardServer(root) {
         if (req.method === 'POST') { const input = await jsonBody(req); send(201, workspace.createTeam(input.name, input.github_url)); return; }
       }
       const parts = url.pathname.split('/').filter(Boolean);
+      if (parts[0] === 'api' && parts[1] === 'teams' && parts[3] === 'members') {
+        if (req.method === 'GET') { send(200, workspace.teams().find(team => team.id === parts[2])?.members || []); return; }
+        if (req.method === 'POST') { await jsonBody(req); send(200, workspace.refreshTeamMembers(parts[2])); return; }
+      }
       if (parts[0] === 'api' && parts[1] === 'teams' && parts[3] === 'projects') {
         const team = parts[2], project = parts[4], operation = parts[5];
         if (!project && req.method === 'POST') { send(201, workspace.createProject(team, (await jsonBody(req)).name)); return; }

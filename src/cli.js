@@ -2,10 +2,12 @@
 const path = require('node:path'); const fs = require('node:fs');
 const { init, load } = require('./config'); const { createEvent } = require('./event'); const { writeEvent, readEvent, listEventFiles } = require('./store'); const { openIndex, indexEvent, timeline, why, eventChain, clearIndex } = require('./index'); const { MemorySync } = require('./git-sync');
 const { dailySummary, writeDailyView } = require('./views');
+const { planner } = require('./planner');
 const { validId, listTeams, teamRoot, registerTeam } = require('./teams');
 const protocol = require('./protocol');
 const automation = require('./automation');
 const repos = require('./repo-registry');
+const { Workspace } = require('./workspace');
 function parse(args) { const options = {}; const positional = []; for (let i=0;i<args.length;i++) { if (args[i].startsWith('--')) { const key=args[i].slice(2); const next=args[i+1]; options[key] = next && !next.startsWith('--') ? args[++i] : true; } else positional.push(args[i]); } return { positional, options }; }
 function root(options) { return path.resolve(options.root || process.cwd()); }
 function print(rows) { console.log(JSON.stringify(rows, null, 2)); }
@@ -13,7 +15,8 @@ async function run(args) {
   const { positional: p, options } = parse(args); const command = p.join(' '); const workspace = root(options);
   if (command === 'bootstrap') { print(protocol.bootstrap(workspace, options.project)); return; }
   if (command === 'doctor') { print(protocol.doctor(workspace)); return; }
-  if (command === 'context') { const allowed=['00-charter','10-decisions','20-projects','30-knowledge']; const files=[]; for(const dir of allowed){const base=path.join(workspace,'shared',dir); if(fs.existsSync(base)) for(const f of fs.readdirSync(base,{withFileTypes:true})) if(f.isFile()) files.push(path.join('shared',dir,f.name));} print({source:'approved TeamBrain records only',files}); return; }
+  if (command === 'context') { const allowed=['00-charter','10-decisions','20-projects','30-knowledge']; const files=[]; for(const dir of allowed){const base=path.join(workspace,'shared',dir); if(fs.existsSync(base)) for(const f of fs.readdirSync(base,{withFileTypes:true})) if(f.isFile()) files.push(path.join('shared',dir,f.name));} const assigned_tasks = options.team && options.project ? planner(path.join(workspace,'teams',validId(options.team),'projects',validId(options.project))).tasks.filter(task => task.status === 'open' && (!options.actor || String(task.assignee || '').toLowerCase() === String(options.actor).toLowerCase())) : []; print({source:'approved TeamBrain records only',files,assigned_tasks}); return; }
+  if (command === 'tasks') { const workspaceModel=new Workspace(workspace); const targets=options.team && options.project ? [{team_id:options.team,project_id:options.project}] : workspaceModel.teams().flatMap(team => team.projects.filter(project => project.id !== 'legacy').map(project => ({team_id:team.id,team_name:team.name,project_id:project.id,project_name:project.name}))); const tasks=targets.flatMap(target => { const projectRoot=workspaceModel.projectPath(validId(target.team_id), validId(target.project_id)); const identity=options.actor || load(projectRoot).actor_id || process.env.USERNAME || process.env.USER || 'unknown'; return planner(projectRoot).tasks.filter(task => task.status === 'open' && (options.all === true || String(task.assignee || '').toLowerCase() === String(identity).toLowerCase())).map(task => ({...task, team_id:target.team_id, team_name:target.team_name, project_id:target.project_id, project_name:target.project_name})); }); print({actor:options.actor || 'project actor',tasks,count:tasks.length}); return; }
   if (command === 'publish') { print(protocol.publish(workspace, options)); return; }
   if (command === 'handoff') { print(protocol.handoff(workspace, options)); return; }
   if (command === 'connect github') { print(await protocol.connectGithub(options.url, options['memory-root'] || options.destination, options.actor, options['auto-sync'])); return; }
@@ -48,6 +51,6 @@ async function run(args) {
   if (command === 'sync status') { print(await new MemorySync(cwd).status()); return; }
   if (command === 'sync pull') { print(await new MemorySync(cwd).pull()); return; }
   if (command === 'sync push') { print(await new MemorySync(cwd).push()); return; }
-  throw new Error('commands: bootstrap, doctor, sync, context, repo add|list|refresh, connect github, connect project, capture commit, github create-memory, publish, handoff, update --check, init, team create|list, status, event create, timeline, why, daily generate, reindex, sync status|pull|push, serve');
+  throw new Error('commands: bootstrap, doctor, sync, context, tasks, repo add|list|refresh, connect github, connect project, capture commit, github create-memory, publish, handoff, update --check, init, team create|list, status, event create, timeline, why, daily generate, reindex, sync status|pull|push, serve');
 }
 module.exports = { run };

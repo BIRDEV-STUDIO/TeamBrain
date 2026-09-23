@@ -1,7 +1,8 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const state = { teams: [], team: null, project: null, snapshot: null, teamChat: [], chatScope: 'team', view: 'overview', calendarCursor: new Date(), query: '', type: '', mode: null, version: 0 };
+const state = { teams: [], team: null, project: null, snapshot: null, teamChat: [], actors: [], memberRefresh: {}, chatScope: 'team', view: 'overview', calendarCursor: new Date(), query: '', type: '', mode: null, version: 0 };
+const notificationTracker = new TeamBrainNotifications.NotificationTracker(localStorage);
 const names = {
   'note.created': 'Not',
   'issue.detected': 'Sorun',
@@ -50,6 +51,62 @@ function team() { return state.teams.find(t => t.id === state.team); }
 function events() { return state.snapshot?.events || []; }
 function chatEvents() { return state.chatScope === 'team' ? state.teamChat : events().filter(e => e.event_type === 'chat.message' || e.event_type === 'chat.reply.generated').reverse(); }
 
+function teamNotificationScope() { return state.team ? `team:${state.team}` : null; }
+function projectNotificationScope() { return state.team && state.project ? `team:${state.team}:project:${state.project}` : null; }
+function ownActors() { return [...state.actors, state.snapshot?.actor, state.snapshot?.connection?.github?.actor_id].filter(Boolean); }
+function notificationItems() {
+  const currentTeam = team();
+  const baselineActor = ownActors()[0] || '__teambrain_self__';
+  const teamItems = [
+    { category: 'team', id: 'baseline:team', actor: baselineActor },
+    { category: 'chat', id: 'baseline:chat', actor: baselineActor },
+    ...(currentTeam?.members || []).map(member => ({ category: 'team', id: `member:${member.login}`, actor: member.login })),
+    ...state.teamChat.filter(event => event.event_type === 'chat.message').map(event => ({ category: 'chat', id: `team-chat:${event.event_id}`, actor: event.actor_id }))
+  ];
+  const projectItems = ['chat', 'activity', 'decisions', 'calendar', 'tasks'].map(category => ({ category, id: `baseline:${category}`, actor: baselineActor }));
+  projectItems.push(...events().filter(event => event.event_type !== 'chat.reply.generated').map(event => ({
+    category: event.event_type === 'chat.message' ? 'chat' : event.event_type.startsWith('decision.') ? 'decisions' : 'activity',
+    id: `event:${event.event_id}`,
+    actor: event.actor_id
+  })));
+  for (const item of state.snapshot?.planner?.calendar || []) projectItems.push({ category: 'calendar', id: `calendar:${item.id}`, actor: item.created_by });
+  for (const item of state.snapshot?.planner?.tasks || []) {
+    projectItems.push({ category: 'tasks', id: `task:${item.id}:created`, actor: item.created_by });
+    if (item.completed_at) projectItems.push({ category: 'tasks', id: `task:${item.id}:done:${item.completed_at}`, actor: item.completed_by });
+  }
+  return { teamItems, projectItems };
+}
+function markViewSeen(view = state.view) {
+  notificationTracker.markSeen(teamNotificationScope(), view);
+  notificationTracker.markSeen(projectNotificationScope(), view);
+}
+function notificationCounts() {
+  const teamCounts = notificationTracker.counts(teamNotificationScope());
+  const projectCounts = notificationTracker.counts(projectNotificationScope());
+  return Object.fromEntries(Object.keys(views).map(view => [view, (teamCounts[view] || 0) + (projectCounts[view] || 0)]));
+}
+function renderNotificationLights() {
+  const counts = notificationCounts();
+  document.querySelectorAll('#nav [data-view]').forEach(button => {
+    const count = counts[button.dataset.view] || 0;
+    button.classList.toggle('has-unread', count > 0);
+    if (count) {
+      button.dataset.unread = count > 99 ? '99+' : String(count);
+      button.setAttribute('aria-label', `${views[button.dataset.view]}: ${count} okunmamış güncelleme`);
+    } else {
+      delete button.dataset.unread;
+      button.removeAttribute('aria-label');
+    }
+  });
+}
+function observeNotifications(markCurrent = false) {
+  const { teamItems, projectItems } = notificationItems();
+  notificationTracker.observe(teamNotificationScope(), teamItems, ownActors());
+  notificationTracker.observe(projectNotificationScope(), projectItems, ownActors());
+  if (markCurrent) markViewSeen();
+  renderNotificationLights();
+}
+
 function choose() {
   $('team').innerHTML = state.teams.length ? state.teams.map(t => `<option value="${escape(t.id)}">${escape(t.name)}</option>`).join('') : '<option>Henüz ekip yok</option>';
   if (state.team) $('team').value = state.team;
@@ -57,6 +114,7 @@ function choose() {
   $('add-project').disabled = !state.team;
 }
 async function reloadTeams() {
+  if (!state.actors.length) state.actors = (await api('/api/identity')).aliases || [];
   state.teams = await api('/api/teams');
   if (!team()) state.team = state.teams[0]?.id || null;
   if (!team()?.projects.some(p => p.id === state.project)) state.project = team()?.projects[0]?.id || null;
@@ -76,12 +134,13 @@ async function loadProject() {
   const version = ++state.version;
   state.snapshot = null;
   render();
-  if (!state.project) return;
+  if (!state.project) { observeNotifications(state.view === 'team' || state.view === 'chat'); return; }
   try {
     const result = await api(base());
     if (version !== state.version) return;
     state.snapshot = result;
     choose();
+    observeNotifications(['team', 'chat', 'activity', 'decisions', 'calendar', 'tasks'].includes(state.view));
     render();
   } catch (error) {
     if (version === state.version) toast(error.message);
@@ -121,6 +180,7 @@ function renderShell(data, decisions) {
   $('metrics').hidden = !data || state.view === 'integrations' || state.view === 'chat';
   $('metrics').innerHTML = [[data?.total || 0, 'Toplam kayıt', 'Projenin kalıcı hafızası', '≋'], [decisions.length, 'Karar kaydı', 'Gerekçesiyle birlikte', '◇'], [events().filter(e => e.event_type === 'issue.detected').length, 'Sorun kaydı', 'Açık/kapalı takibi henüz yok', '◌'], [new Set(events().map(e => e.actor_id)).size, 'Katkı veren', 'Kayıtlardaki farklı kişiler', '↗']].map(([n, label, hint, icon]) => `<div class="metric"><div class="metric-top"><span>${label}</span><span>${icon}</span></div><strong>${n}</strong><small>${hint}</small></div>`).join('');
   document.querySelectorAll('[data-view]').forEach(b => { b.classList.toggle('active', b.dataset.view === state.view); b.setAttribute('aria-current', b.dataset.view === state.view ? 'page' : 'false'); });
+  renderNotificationLights();
 }
 function plannerEditor(mode) {
   state.mode = mode; $('form-error').textContent = '';
@@ -180,7 +240,7 @@ function renderChat() {
   const sharing = github?.connected ? (github.sync === 'background' ? 'GitHub’a otomatik gönderiliyor' : 'GitHub’a manuel senkron bekliyor') : team()?.github_repo ? 'GitHub memory reposuna bağlı' : 'GitHub bağlantısı kurulmadı';
   const privacy = 'Ekip içi sohbet; Obsidian bilgi kayıtlarına dahil edilmez.';
   const scopeButtons = `<div class="calendar-actions chat-switch" role="group" aria-label="Sohbet alanı"><button class="${state.chatScope === 'team' ? 'primary' : 'secondary'}" type="button" data-chat-scope="team">Ekip sohbeti</button><button class="${state.chatScope === 'project' ? 'primary' : 'secondary'}" type="button" data-chat-scope="project">Proje sohbeti</button></div>`;
-  $('content').innerHTML = `<section class="chat-panel"><div class="chat-history" id="chat-history"><div class="panel-head chat-context"><div><strong>${state.chatScope === 'team' ? 'Ekip sohbeti' : 'Proje sohbeti'}</strong><small>${state.chatScope === 'team' ? 'Tüm ekip üyeleriyle ortak konuşma' : 'Yalnızca seçili projenin bağlamı'} · ${escape(sharing)} · ${privacy}</small></div>${scopeButtons}</div>${messages.map(chatBubble).join('') || empty(state.chatScope === 'team' ? 'Ekip sohbeti henüz boş.' : 'Bu projede sohbet yok.', state.chatScope === 'team' ? 'Ekip arkadaşlarına ilk mesajı bırak.' : 'Proje bağlamı hakkında soru sor veya not bırak.')}</div><form id="chat-form" class="chat-composer"><label class="sr-only" for="chat-message">Mesaj</label><textarea id="chat-message" name="message" maxlength="50000" placeholder="${state.chatScope === 'team' ? 'Ekip arkadaşlarına mesaj yaz…' : 'Bu projenin bağlamını sor…'}"></textarea><button class="primary" id="send-chat">Gönder</button></form></section><div class="link-status">${privacy} ${state.chatScope === 'team' ? 'Ekip sohbeti ayrı team-chat klasöründe tutulur.' : 'Proje sohbeti ayrı project-chat klasöründe tutulur.'} ${escape(sharing)}.</div>`;
+  $('content').innerHTML = `<section class="chat-panel"><div class="chat-history" id="chat-history"><div class="panel-head chat-context"><div><strong>${state.chatScope === 'team' ? 'Ekip sohbeti' : 'Proje sohbeti'}</strong><small>${state.chatScope === 'team' ? 'Tüm ekip üyeleriyle ortak konuşma' : 'Yalnızca seçili projenin bağlamı'} · ${escape(sharing)} · ${privacy}</small></div>${scopeButtons}</div>${messages.map(chatBubble).join('') || empty(state.chatScope === 'team' ? 'Ekip sohbeti henüz boş.' : 'Bu projede sohbet yok.', state.chatScope === 'team' ? 'Ekip arkadaşlarına ilk mesajı bırak.' : 'Proje bağlamı hakkında soru sor veya not bırak.')}</div><form id="chat-form" class="chat-composer"><label class="sr-only" for="chat-message">Mesaj</label><textarea id="chat-message" name="message" maxlength="50000" placeholder="${state.chatScope === 'team' ? 'Ekip arkadaşlarına mesaj yaz…' : 'Bu projenin bağlamını sor…'}"></textarea><button class="primary" id="send-chat">Gönder</button></form></section><div class="link-status">${privacy} Sohbet, incelenmiş shared kayıtlarından ayrı collaboration alanında tutulur. ${escape(sharing)}.</div>`;
   const history = $('chat-history');
   history.scrollTop = history.scrollHeight;
   $('chat-form').addEventListener('submit', submitChat);
@@ -251,7 +311,7 @@ async function detail(eventId) {
 }
 $('team').addEventListener('change', async e => { state.team = e.target.value; state.project = team()?.projects[0]?.id || null; state.query = ''; choose(); await loadTeamChat(); await loadProject(); });
 $('projects').addEventListener('click', async e => { const b = e.target.closest('[data-project]'); if (b) { state.project = b.dataset.project; state.query = ''; state.type = ''; choose(); await loadProject(); } });
-$('nav').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) { state.view = b.dataset.view; state.query = ''; state.type = ''; render(); } });
+$('nav').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) { state.view = b.dataset.view; state.query = ''; state.type = ''; markViewSeen(); render(); } });
 $('content').addEventListener('click', async e => {  const calendarNav = e.target.closest('[data-calendar-nav]')?.dataset.calendarNav;
   if (calendarNav) { const cursor = state.calendarCursor || new Date(); if (calendarNav === 'today') state.calendarCursor = new Date(); else state.calendarCursor = new Date(cursor.getFullYear(), cursor.getMonth() + (calendarNav === 'next' ? 1 : -1), 1); render(); return; }
   const event = e.target.closest('[data-event]');
@@ -259,7 +319,7 @@ $('content').addEventListener('click', async e => {  const calendarNav = e.targe
   const action = e.target.closest('[data-action]')?.dataset.action;
   if (['team', 'project', 'event'].includes(action)) editor(action);
   if (action === 'calendar' || action === 'task') plannerEditor(action);
-  if (action === 'activity') { state.view = 'activity'; render(); }
+  if (action === 'activity') { state.view = 'activity'; markViewSeen(); render(); }
   if (action === 'refresh') await loadProject();
   if (action === 'refresh-members') { try { const result = await api(`/api/teams/${state.team}/members`, {}, 'POST'); toast(`${result.members.length} GitHub üyesi güncellendi.`); await reloadTeams(); } catch (error) { toast(error.message); } }
   const taskButton = e.target.closest('[data-task]');
@@ -304,10 +364,39 @@ $('editor-form').addEventListener('submit', async e => {
   }
 });
 document.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); state.view = 'activity'; render(); $('search')?.focus(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); state.view = 'activity'; markViewSeen(); render(); $('search')?.focus(); }
 });
+
+let updatePollRunning = false;
+async function pollIncomingUpdates() {
+  if (updatePollRunning || document.hidden || !state.team) return;
+  updatePollRunning = true;
+  const selectedTeam = state.team, selectedProject = state.project;
+  try {
+    const requests = [api('/api/teams'), api(`/api/teams/${selectedTeam}/chat`)];
+    if (selectedProject) requests.push(api(`/api/teams/${selectedTeam}/projects/${selectedProject}`));
+    let [teams, teamChat, snapshot] = await Promise.all(requests);
+    if (state.team !== selectedTeam || state.project !== selectedProject) return;
+    const selected = teams.find(item => item.id === selectedTeam);
+    if (selected?.github_repo && Date.now() - (state.memberRefresh[selectedTeam] || 0) > 5 * 60 * 1000) {
+      state.memberRefresh[selectedTeam] = Date.now();
+      try { await api(`/api/teams/${selectedTeam}/members`, {}, 'POST'); teams = await api('/api/teams'); } catch {}
+    }
+    state.teams = teams;
+    state.teamChat = teamChat;
+    if (snapshot) state.snapshot = snapshot;
+    choose();
+    const userIsTyping = document.activeElement?.matches('input, textarea, select') || $('editor').open || $('detail').open;
+    observeNotifications(!userIsTyping && ['team', 'chat', 'activity', 'decisions', 'calendar', 'tasks'].includes(state.view));
+    if (!userIsTyping) render();
+  } catch { /* The next poll retries; normal work should not be interrupted. */ }
+  finally { updatePollRunning = false; }
+}
+
 checkForUpdate();
 setInterval(checkForUpdate, 30 * 60 * 1000);
+setInterval(pollIncomingUpdates, 20 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) pollIncomingUpdates(); });
 reloadTeams().catch(error => { $('content').textContent = 'Bağlantı kurulamadı: ' + error.message; toast(error.message); });
 
 // The connection view reflects the selected memory repository instead of a hard-coded preview state.

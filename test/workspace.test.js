@@ -6,6 +6,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { Workspace } = require('../src/workspace');
 const { createDashboardServer } = require('../src/dashboard-server');
+const { createEvent } = require('../src/event');
+const { writeEvent } = require('../src/store');
 
 test('project isolation, causal reference validation and transactional rebuild', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-workspace-'));
@@ -25,6 +27,19 @@ test('project isolation, causal reference validation and transactional rebuild',
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+test('project snapshots index canonical events received from another actor', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-incoming-'));
+  try {
+    const w = new Workspace(root), team = w.createTeam('Studio'), project = w.createProject(team.id, 'Robot');
+    const projectRoot = w.projectPath(team.id, project.id);
+    const incoming = createEvent({ eventType: 'decision.accepted', title: 'Remote decision', actorId: 'ada', deviceId: 'ada-laptop' }, { project_id: project.id, actor_id: 'ada', device_id: 'ada-laptop' });
+    writeEvent(projectRoot, incoming);
+    const snapshot = w.snapshot(team.id, project.id);
+    assert.equal(snapshot.events.some(event => event.event_id === incoming.event_id), true);
+    assert.equal(snapshot.events.find(event => event.event_id === incoming.event_id).actor_id, 'ada');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('workspace chat persists messages as project-scoped canonical events', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-chat-'));
   try {
@@ -37,7 +52,7 @@ test('workspace chat persists messages as project-scoped canonical events', () =
     assert.equal(chat.reply.causation_id, chat.user.event_id);
     assert.match(chat.reply.body, /Use Git memory|son bağlam|yerel kayıt/i);
     assert.equal(w.snapshot(team.id, robot.id).events.filter(e => e.event_type.startsWith('chat.')).length, 2);
-    assert.equal(fs.existsSync(path.join(w.projectPath(team.id, robot.id), '.teambrain', 'project-chat', 'messages.json')), true);
+    assert.equal(fs.existsSync(path.join(w.projectPath(team.id, robot.id), 'collaboration', 'chat', 'project.json')), true);
     assert.equal(fs.readdirSync(path.join(w.projectPath(team.id, robot.id), 'memory', 'events')).filter(file => file.endsWith('.md')).length, 0, 'chat must not create Obsidian-facing event markdown');
     assert.equal(w.snapshot(team.id, web.id).events.length, 0);
     assert.throws(() => w.chat(team.id, robot.id, { message: ' ' }));
@@ -52,7 +67,7 @@ test('team chat is isolated from project chat and Obsidian event markdown', () =
     assert.equal(message.actor_id, 'ada');
     assert.equal(w.teamChatSnapshot(team.id).length, 1);
     assert.equal(w.snapshot(team.id, project.id).chat.length, 0);
-    assert.equal(fs.existsSync(path.join(root, 'teams', team.id, '.teambrain', 'team-chat', 'messages.json')), true);
+    assert.equal(fs.existsSync(path.join(root, 'teams', team.id, 'collaboration', 'chat', 'team.json')), true);
     assert.equal(fs.readdirSync(path.join(w.projectPath(team.id, project.id), 'memory', 'events')).filter(file => file.endsWith('.md')).length, 0);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
@@ -80,6 +95,8 @@ test('project snapshots inherit the GitHub connection from the memory workspace 
     const snapshot = w.snapshot(team.id, project.id);
     assert.equal(snapshot.connection.github.connected, true);
     assert.equal(snapshot.connection.github.sync, 'background');
+    assert.equal(w.identity().actor, 'ada');
+    assert.ok(w.identity().aliases.includes('ada'));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -95,8 +112,8 @@ test('cached GitHub members are exposed to the project and task planner', () => 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-members-'));
   try {
     const w = new Workspace(root), team = w.createTeam('Studio'), project = w.createProject(team.id, 'Robot');
-    fs.mkdirSync(path.join(root, 'teams', team.id, '.teambrain'), { recursive: true });
-    fs.writeFileSync(path.join(root, 'teams', team.id, '.teambrain', 'members.json'), JSON.stringify({ members: [{ login: 'ada', name: 'Ada', permissions: { push: true } }] }));
+    fs.mkdirSync(path.join(root, 'teams', team.id, 'collaboration'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'teams', team.id, 'collaboration', 'members.json'), JSON.stringify({ members: [{ login: 'ada', name: 'Ada', permissions: { push: true } }] }));
     const snapshot = w.snapshot(team.id, project.id);
     assert.equal(snapshot.members[0].login, 'ada');
     const task = w.addTask(team.id, project.id, { title: 'Review', assignee: 'ada' });
@@ -114,6 +131,11 @@ test('dashboard HTTP onboarding, input checks, security headers and cross-origin
     const html = await fetch(base);
     assert.match(await html.text(), /app.js/);
     assert.match(html.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+    assert.equal((await fetch(base + '/notifications.js')).status, 200);
+    assert.equal((await fetch(base + '/notifications.css')).status, 200);
+    const identity = await (await fetch(base + '/api/identity')).json();
+    assert.ok(identity.actor);
+    assert.ok(identity.aliases.includes(identity.actor));
     assert.equal((await post('/api/teams', { name: 'Bad' }, { Origin: 'https://evil.example' })).status, 403);
     const hostStatus = await new Promise((resolve, reject) => {
       require('node:http').get(base + '/api/teams', { headers: { Host: 'evil.example' } }, res => { res.resume(); resolve(res.statusCode); }).on('error', reject);

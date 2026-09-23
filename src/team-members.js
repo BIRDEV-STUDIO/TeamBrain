@@ -3,10 +3,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-function file(root) { return path.join(root, '.teambrain', 'members.json'); }
+function file(root) { return path.join(root, 'collaboration', 'members.json'); }
 function read(root) {
   try {
-    const data = JSON.parse(fs.readFileSync(file(root), 'utf8'));
+    const target = file(root), legacy = path.join(root, '.teambrain', 'members.json');
+    const data = JSON.parse(fs.readFileSync(fs.existsSync(target) ? target : legacy, 'utf8'));
     return Array.isArray(data.members) ? data : { schema_version: 1, members: [] };
   } catch { return { schema_version: 1, members: [] }; }
 }
@@ -23,7 +24,9 @@ function fetchMembers(repo) {
 function refresh(root, repo) {
   if (!repo?.full) return { ...read(root), state: 'not-configured' };
   try {
-    const data = { schema_version: 1, source: repo.full, refreshed_at: new Date().toISOString(), members: fetchMembers(repo) };
+    const current = read(root), members = fetchMembers(repo);
+    if (JSON.stringify(current.members) === JSON.stringify(members)) return { ...current, source: repo.full, state: 'synced' };
+    const data = { schema_version: 1, source: repo.full, refreshed_at: new Date().toISOString(), members };
     fs.mkdirSync(path.dirname(file(root)), { recursive: true });
     fs.writeFileSync(file(root), JSON.stringify(data, null, 2) + '\n');
     return { ...data, state: 'synced' };

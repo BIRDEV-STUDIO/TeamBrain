@@ -1,0 +1,6 @@
+/* Incoming team activity: a compact, accessible light on the relevant navigation item. */
+nav button{position:relative}
+nav button.has-unread::after{content:attr(data-unread);position:absolute;right:10px;top:50%;min-width:17px;height:17px;padding:0 4px;border-radius:9px;display:grid;place-items:center;transform:translateY(-50%);background:#d5ef9c;color:#1e3830;font-size:9px;font-weight:800;box-shadow:0 0 0 0 #d5ef9c99;animation:notification-pulse 1.7s ease-out infinite}
+nav button.active.has-unread::after{background:#285d4b;color:#fff}
+@keyframes notification-pulse{0%{box-shadow:0 0 0 0 #d5ef9c99;filter:brightness(1.15)}65%{box-shadow:0 0 0 7px #d5ef9c00;filter:brightness(1)}100%{box-shadow:0 0 0 0 #d5ef9c00}}
+@media(prefers-reduced-motion:reduce){nav button.has-unread::after{animation:none}}

@@ -28,8 +28,36 @@ function id(value) {
 function directories(root) {
   return fs.existsSync(root) ? fs.readdirSync(root, { withFileTypes: true }).filter(e => e.isDirectory() && !e.isSymbolicLink()).map(e => e.name) : [];
 }
+function reconcileIndex(root, config, db) {
+  const indexed = new Map(db.prepare('SELECT event_id, event_path FROM events').all().map(row => [row.event_id, row.event_path]));
+  const canonical = new Map();
+  let complete = true;
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    for (const file of listEventFiles(root)) {
+      let event;
+      try { event = readEvent(file); }
+      catch { complete = false; continue; }
+      if (event.project_id !== config.project_id) throw new Error('Başka projeye ait kayıt bulundu.');
+      if (canonical.has(event.event_id)) throw new Error('Aynı kayıt kimliği birden fazla dosyada bulundu.');
+      canonical.set(event.event_id, file);
+      if (!indexed.has(event.event_id)) indexEvent(db, event, file);
+      else if (indexed.get(event.event_id) !== file) db.prepare('UPDATE events SET event_path = ? WHERE event_id = ?').run(file, event.event_id);
+    }
+    if (complete) for (const eventId of indexed.keys()) if (!canonical.has(eventId)) db.prepare('DELETE FROM events WHERE event_id = ?').run(eventId);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
 class Workspace {
   constructor(root) { this.root = path.resolve(root); }
+  identity() {
+    const local = process.env.USERNAME || process.env.USER || 'unknown';
+    const connected = this.connection(this.root).github?.actor_id;
+    return { actor: connected || local, aliases: [...new Set([connected, local].filter(Boolean))] };
+  }
   teamPath(team) {
     const target = path.join(this.root, 'teams', id(team));
     if (fs.existsSync(target) && fs.lstatSync(target).isSymbolicLink()) throw new Error('Sembolik ekip yolu desteklenmiyor.');
@@ -95,6 +123,7 @@ class Workspace {
   }
   snapshot(team, project) {
     return this.withProject(team, project, ({ root, config, db }) => {
+      reconcileIndex(root, config, db);
       const legacyChat = migrateLegacyChat(root, db), chat = legacyChat.messages;
       const events = [...timeline(db, 1000), ...chat].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 1000);
       const connection = this.connection(root);

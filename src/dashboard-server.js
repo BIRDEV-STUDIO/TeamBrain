@@ -5,7 +5,7 @@ const path = require('node:path');
 const { Workspace } = require('./workspace');
 const { SyncWorker } = require('./sync-worker');
 const { checkForUpdate } = require('./update-check');
-const assets = { '/': ['index.html', 'text/html'], '/app.css': ['app.css', 'text/css'], '/app.js': ['app.js', 'text/javascript'] };
+const assets = { '/': ['index.html', 'text/html'], '/app.css': ['app.css', 'text/css'], '/notifications.css': ['notifications.css', 'text/css'], '/notifications.js': ['notifications.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'] };
 
 function guard(req) {
   const expected = `127.0.0.1:${req.socket.localPort}`;
@@ -46,6 +46,7 @@ function createDashboardServer(root) {
         res.end(fs.readFileSync(path.join(__dirname, '..', 'public', file))); return;
       }
       if (req.method === 'GET' && url.pathname === '/api/update') { send(200, await checkForUpdate()); return; }
+      if (req.method === 'GET' && url.pathname === '/api/identity') { send(200, workspace.identity()); return; }
       if (url.pathname === '/api/teams') {
         if (req.method === 'GET') { send(200, workspace.teams()); return; }
         if (req.method === 'POST') { const input = await jsonBody(req); send(201, await withSync(workspace.createTeam(input.name, input.github_url))); return; }

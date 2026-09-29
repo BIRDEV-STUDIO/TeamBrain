@@ -74,6 +74,8 @@ node --experimental-sqlite C:\TeamBrain\bin\teambrain.js connect github `
 
 During setup, answer `e` to enable background sync or `h` for manual sync. Review the displayed repository URL, local destination, actor, and sync choice before continuing. Then run:
 
+The same first-time flow optionally offers to prepare an initial contribution from a user-selected JSON export of private memory. The user must enter one project ID (for example `sutols`); TeamBrain uses exact, case-insensitive `project_id` matching and never includes records from similarly named or unrelated projects. Only `title`, reviewed `summary`, and `source`/`source_ref` fields are previewed—raw bodies and chats are ignored. After a privacy review and a separate sharing confirmation, the contribution is written to `shared/90-receipts/pending/` for human review; declining leaves private memory untouched.
+
 ```powershell
 node --experimental-sqlite C:\TeamBrain\bin\teambrain.js doctor --root C:\TeamBrain-memory
 node --experimental-sqlite C:\TeamBrain\bin\teambrain.js context --root C:\TeamBrain-memory

@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const {loadProjectMemoryExport,publishInitialProjectMemory}=require('./project-memory-import');
 const SHARED = ['00-charter','10-decisions','20-projects','30-knowledge','40-handoffs','90-receipts/pending','99-archive'];
 function askQuestion(prompt, fallback = '') {
   const readline=require('node:readline'); const io=readline.createInterface({input:process.stdin,output:process.stdout});
@@ -24,19 +25,37 @@ async function askConnectionSetup({url, destination, actor, autoSync}) {
   destination = destination || await askQuestion('Bu hafıza yerelde nereye kaydedilsin?', path.join(process.cwd(), 'teambrain-memory'));
   actor = actor || await askQuestion('TeamBrain kullanıcı kimliğin nedir?', process.env.USERNAME || process.env.USER || 'unknown');
   if (autoSync === undefined) autoSync = await askAutoSync(autoSync);
-  console.log(`\nRepo: ${url}\nYerel kayıt: ${destination}\nKullanıcı: ${actor}\nOtomatik senkron: ${autoSync ? 'Evet' : 'Hayır'}`);
+  let initialContribution = null;
+  const importAnswer = await askQuestion('Belirli bir projeye ait seçilmiş özel hafıza özetlerinden ilk katkı hazırlansın mı? (e/h)', 'h');
+  if (/^e|evet|y|yes$/i.test(importAnswer)) {
+    const project = await askQuestion('Yalnızca hangi proje kimliğine ait kayıtlar alınsın?');
+    const exportFile = await askQuestion(`${project} için seçilmiş JSON hafıza dışa aktarımının tam yolu`);
+    initialContribution = loadProjectMemoryExport(exportFile, project);
+    if (!initialContribution.records.length) throw new Error(`${project} projesine birebir bağlı, özet ve kaynak içeren kayıt bulunamadı.`);
+    console.log(`\nYalnızca ${project} projesine ait paylaşım önizlemesi:`);
+    for (const record of initialContribution.records) console.log(`- ${record.title}: ${record.summary} [${record.source}]`);
+    console.log(`Diğer projelerden dışarıda bırakılan kayıt: ${initialContribution.excluded.other_project}`);
+    const reviewed = await askQuestion('Önizlemeyi inceledin; kişisel not, sır, kimlik bilgisi veya redakte edilmemiş müşteri verisi içermediğini onaylıyor musun? (e/h)', 'h');
+    if (!/^e|evet|y|yes$/i.test(reviewed)) throw new Error('İlk hafıza katkısı gizlilik onayı verilmediği için iptal edildi.');
+    const share = await askQuestion(`Bu ${initialContribution.records.length} ${project} kaydı TeamBrain inceleme kuyruğuna ilk katkı olarak yazılsın mı? (e/h)`, 'h');
+    if (!/^e|evet|y|yes$/i.test(share)) initialContribution = null;
+  }
+  console.log(`\nRepo: ${url}\nYerel kayıt: ${destination}\nKullanıcı: ${actor}\nOtomatik senkron: ${autoSync ? 'Evet' : 'Hayır'}\nİlk proje katkısı: ${initialContribution ? `${initialContribution.project_id} (${initialContribution.records.length} kayıt, inceleme bekleyecek)` : 'Hayır'}`);
   const ready = await askQuestion('Bu ayarlarla kuruluma devam edilsin mi? (e/h)', 'e');
   if (!/^e|evet|y|yes$/i.test(ready)) throw new Error('GitHub bağlantısı iptal edildi.');
-  return { url, destination, actor, autoSync };
+  return { url, destination, actor, autoSync, initialContribution };
 }
 async function connectGithub(url, destination, actor, autoSync) {
-  ({ url, destination, actor, autoSync } = await askConnectionSetup({url, destination, actor, autoSync}));
+  let initialContribution;
+  ({ url, destination, actor, autoSync, initialContribution } = await askConnectionSetup({url, destination, actor, autoSync}));
   if (typeof url !== 'string' || !/^(https:\/\/github\.com\/[^/\s]+\/[^/\s]+(?:\.git)?|git@github\.com:[^/\s]+\/[^/\s]+(?:\.git)?)$/.test(url)) throw new Error('Use a GitHub HTTPS or SSH repository URL.');
   const {execFileSync}=require('node:child_process'); const target=path.resolve(destination || path.join(process.cwd(),'teambrain-memory'));
   if (!fs.existsSync(path.join(target,'.git'))) { if (fs.existsSync(target) && fs.readdirSync(target).length) throw new Error(`Destination is not empty: ${target}`); execFileSync('git',['clone',url,target],{stdio:'inherit'}); }
   const remote=execFileSync('git',['-C',target,'remote','get-url','origin'],{encoding:'utf8'}).trim();
   const automatic=await askAutoSync(autoSync); const connection=path.join(target,'.teambrain','connection.json'); fs.mkdirSync(path.dirname(connection),{recursive:true}); fs.writeFileSync(connection,JSON.stringify({schema_version:1,provider:'github',remote,actor_id:actor||process.env.USERNAME||'unknown',connected_at:new Date().toISOString(),auto_sync:automatic,sync:automatic?'background':'manual',sync_scope:['shared','teams']},null,2)+'\n');
-  bootstrap(target, path.basename(target)); return {connected:true, memory_root:target, remote, actor_id:actor||process.env.USERNAME||'unknown',auto_sync:automatic, next_steps:['teambrain doctor --root "'+target+'"','teambrain context --root "'+target+'"','teambrain dashboard --root "'+target+'"']};
+  bootstrap(target, path.basename(target));
+  const initial_contribution=initialContribution ? publishInitialProjectMemory(target,initialContribution,actor||process.env.USERNAME||'unknown',publish) : null;
+  return {connected:true, memory_root:target, remote, actor_id:actor||process.env.USERNAME||'unknown',auto_sync:automatic, initial_contribution:initial_contribution ? {status:'pending',project_id:initialContribution.project_id,file:initial_contribution.file} : null, next_steps:['teambrain doctor --root "'+target+'"','teambrain context --root "'+target+'"','teambrain dashboard --root "'+target+'"']};
 }
 async function createGithubMemory(owner, name, visibility, destination, actor, autoSync) {
   if (!name || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(name)) throw new Error('Use a simple GitHub repository name.');

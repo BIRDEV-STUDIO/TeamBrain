@@ -6,6 +6,18 @@
   else root.TeamBrainNotifications = api;
 })(typeof globalThis === 'object' ? globalThis : this, function createModule() {
   const normalize = value => String(value || '').trim().toLocaleLowerCase('tr-TR');
+  function buildAgentSetupPrompt(guide = {}) {
+    const provided = String(guide.agent_prompt || '').trim();
+    if (provided) return provided;
+    const memoryRepository = String(guide.memory_repository || '').trim();
+    const command = String(guide.command || '').trim();
+    const team = String(guide.team?.name || guide.team?.id || 'Seçili ekip').trim();
+    const project = String(guide.project?.name || guide.project?.id || 'Seçili proje').trim();
+    const repositoryInstruction = memoryRepository
+      ? `TeamBrain hafıza reposu olarak yalnızca şu kesin URL'yi kullan: ${memoryRepository}.`
+      : 'Kuruluma başlamadan önce kullanıcıdan kesin özel TeamBrain hafıza repo URL’sini iste; URL’yi tahmin etme veya başka bir repo ile ikame etme.';
+    return `Bu kod reposuna TeamBrain kur. Önce üzerinde çalıştığın kod reposunun tam yerel yolunu ve Git remote adresini doğrula. ${repositoryInstruction} Ekip: ${team}. Proje: ${project}. Kararlı TeamBrain actor kimliğini GitHub kullanıcı girişinden doğrula; kişiyi e-posta veya görünen addan tahmin etme. Otomatik senkron, başlangıç ayarı, ekip ve proje seçimlerini kullanıcıyla birlikte tamamla. Repo klonlamadan, hook kurmadan, AGENTS.md dosyasını değiştirmeden veya bağlantı dosyası yazmadan önce tüm son seçimleri kullanıcıya göster ve onaylat. Ardından TeamBrain kurulum sihirbazını çalıştır, kurulumu doğrula ve sonucu özetle.${command ? ` Kurulum komutu referansı: ${command}` : ''}`;
+  }
 
   class NotificationTracker {
     constructor(storage, prefix = 'teambrain-unread-v1') {
@@ -60,5 +72,5 @@
       return Object.fromEntries(Object.entries(state).map(([category, value]) => [category, Array.isArray(value?.unread) ? value.unread.length : 0]));
     }
   }
-  return { NotificationTracker };
+  return { NotificationTracker, buildAgentSetupPrompt };
 });

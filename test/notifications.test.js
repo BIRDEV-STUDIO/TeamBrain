@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { NotificationTracker } = require('../public/notifications');
+const { NotificationTracker, buildAgentSetupPrompt } = require('../public/notifications');
 
 function storage() {
   const data = new Map();
@@ -35,4 +35,20 @@ test('notification tracker keeps unread items until their menu is seen', () => {
     { category: 'team', id: 'member:ada', actor: 'ada' }
   ], ['emre']);
   assert.equal(tracker.counts('team-a').team, 0, 'the same item must not become unread twice');
+});
+
+test('setup guide builds a safe client fallback when an older dashboard omits agent_prompt', () => {
+  const prompt = buildAgentSetupPrompt({
+    memory_repository: 'https://github.com/acme/memory.git',
+    team: { name: 'Studio' },
+    project: { name: 'Robot' },
+    command: 'teambrain setup --repo C:\\code'
+  });
+  assert.match(prompt, /yalnızca şu kesin URL'yi kullan: https:\/\/github\.com\/acme\/memory\.git/);
+  assert.match(prompt, /tüm son seçimleri kullanıcıya göster ve onaylat/);
+  assert.match(prompt, /teambrain setup --repo/);
+});
+
+test('setup guide prefers the server-provided agent prompt', () => {
+  assert.equal(buildAgentSetupPrompt({ agent_prompt: 'Sunucudan gelen mesaj' }), 'Sunucudan gelen mesaj');
 });

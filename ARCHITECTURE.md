@@ -39,6 +39,8 @@ Creation writes the canonical file first with exclusive-create semantics, then i
 - `src/store.js`: canonical Markdown persistence.
 - `src/index.js`: disposable local SQLite projection.
 - `src/git-sync.js`: explicit Git status/pull/push adapter. `src/sync-worker.js` provides opt-in background fetch/rebase/commit/push for the selected memory repository and pauses on Git attention states.
+- `src/setup.js`: confirmed end-to-end installer for the private memory repository, code repository, actor identity, project mapping, Git hook, managed agent instructions and optional Windows startup.
+- `src/agent-session.js`: bounded approved-context injection, assigned-task retrieval and privacy-reviewed Markdown outcome capture for instruction-aware terminal/desktop agents.
 - `src/workspace.js`: team/project discovery, scoped operations and transactional dashboard reindex.
 - `src/dashboard-server.js`: loopback dashboard/API, exact asset allowlist, origin/Host checks, bounded JSON requests and content security policy.
 - `src/local-api.js`: legacy single-project API; the CLI now launches the workspace dashboard instead.
@@ -46,6 +48,21 @@ Creation writes the canonical file first with exclusive-create semantics, then i
 - `src/integrations/`: opt-in AvenoxBeyin session-import and Serena impact-event boundaries. They preserve TeamBrain's rule that external tools never own canonical memory.
 - Obsidian is a client/adapter only; it must call the node or read the canonical memory format rather than own data.
 - `src/protocol.js`: bootstrap, doctor, privacy-gated receipt publishing, and handoff records. AvenoxBeyin version/checksum configuration is opt-in and never auto-installs or trusts hooks.
+
+## Automatic development loop
+
+The portable baseline is Git plus repository instructions. `setup` installs a
+reviewed `post-commit` hook and a managed `AGENTS.md` block without replacing
+existing project guidance. A commit creates an immutable Markdown event containing
+metadata and file statistics, then requests a one-shot memory sync. Instruction-aware
+agents call `session start` to pull bounded approved context and assigned tasks, and
+`session finish` to write one concise, privacy-reviewed Markdown outcome. Both the
+periodic dashboard worker and one-shot paths use the same scoped sync worker.
+
+The memory repository's root `.teambrain/` remains machine-local. Project
+`.teambrain/config.json` files under `teams/` are shared so every clone can discover
+the same team/project topology; derived SQLite indexes, logs and legacy hidden chat
+paths remain ignored. Canonical activity and collaboration data live under `teams/`.
 
 ## Daily summaries
 

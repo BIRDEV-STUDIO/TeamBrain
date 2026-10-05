@@ -22,7 +22,7 @@ Remaining before 1.0:
 
 - [ ] JSON Schema runtime validation and canonical approval/promotion workflow
 - [ ] Remote onboarding and authenticated membership/authorization
-- [ ] Safe conflict detection/recovery and optional background sync
+- [x] Safe conflict pause state and optional dashboard/commit/session synchronization
 
 ## v0.2 — collaboration hygiene (carried work)
 

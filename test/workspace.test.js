@@ -100,6 +100,21 @@ test('project snapshots inherit the GitHub connection from the memory workspace 
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+test('teams can be removed safely and setup guidance is generated', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-delete-'));
+  try {
+    fs.mkdirSync(path.join(root, '.teambrain'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.teambrain', 'connection.json'), JSON.stringify({ remote: 'https://github.com/acme/memory.git' }));
+    const workspace = new Workspace(root), team = workspace.createTeam('Wrong team');
+    workspace.createProject(team.id, 'Accidental project');
+    const guide = workspace.setupGuide(team.id);
+    assert.match(guide.command, /acme\/memory\.git/);
+    assert.throws(() => workspace.deleteTeam(team.id, { confirmation: 'wrong' }), /proje var/);
+    assert.equal(workspace.deleteTeam(team.id, { confirmation: team.name }).deleted, true);
+    assert.equal(workspace.teams().length, 0);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('team creation requires a reachable GitHub repository and stores its identity', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-team-github-'));
   const w = new Workspace(root);

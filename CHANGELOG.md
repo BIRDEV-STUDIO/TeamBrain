@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added one-command, AI-guided `setup` with explicit repository, identity, sync,
+  startup, team, project and final-confirmation gates.
+- Added managed `AGENTS.md` installation for bounded shared context, assigned tasks
+  and privacy-reviewed session outcome recording in Codex CLI/desktop workflows.
+- Commit capture now writes Markdown and attempts a one-shot memory sync even when
+  the dashboard is closed; later successful syncs retry unpushed commits and clear
+  stale attention markers.
 - Added project-scoped document import for text, CSV/TSV/JSON, DOCX, XLSX/XLSM and PDF files. Readable text is converted to traceable Markdown instead of committing original binary files.
 
 All notable changes are documented here.

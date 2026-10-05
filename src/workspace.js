@@ -101,6 +101,29 @@ class Workspace {
     const memberData = refreshMembers(base, github_repo);
     return { id: team, name, github_repo, members: memberData.members, members_state: memberData.state, projects: [] };
   }
+  deleteTeam(team, options = {}) {
+    const target = this.teamPath(team);
+    if (!fs.existsSync(target)) throw new Error('Ekip bulunamadı.');
+    const recordPath = path.join(target, 'team.json');
+    const record = fs.existsSync(recordPath) ? JSON.parse(fs.readFileSync(recordPath, 'utf8')) : { name: team };
+    const projects = directories(path.join(target, 'projects'));
+    const confirmation = String(options.confirmation || '').trim();
+    if (projects.length && confirmation !== record.name) throw new Error(`Bu ekipte ${projects.length} proje var. Silmek için ekip adını aynen yazın.`);
+    fs.rmSync(target, { recursive: true, force: true });
+    return { deleted: true, id: team, name: record.name, projects_removed: projects.length };
+  }
+  setupGuide(team) {
+    const selected = this.teams().find(item => item.id === team);
+    if (!selected) throw new Error('Ekip bulunamadı.');
+    let memoryRemote = '';
+    try { memoryRemote = JSON.parse(fs.readFileSync(path.join(this.root, '.teambrain', 'connection.json'), 'utf8')).remote || ''; } catch {}
+    const project = selected.projects.find(item => item.id !== 'legacy') || { id: 'PROJECT_ID', name: 'Proje adı' };
+    const memoryRoot = this.root.replace(/\\/g, '\\\\');
+    const command = memoryRemote
+      ? `node --experimental-sqlite C:\\TeamBrain\\bin\\teambrain.js setup --repo C:\\path\\to\\code --url ${memoryRemote} --memory-root "${memoryRoot}" --team-name "${selected.name}" --project-name "${project.name}"`
+      : 'Önce özel TeamBrain-memory GitHub reposunu Bağlantılar bölümünden bağlayın.';
+    return { team: { id: selected.id, name: selected.name }, memory_repository: memoryRemote || null, project, command, steps: ['Kod reposunu bilgisayarınıza klonlayın.', 'Terminali kod reposunun klasöründe açın.', 'Aşağıdaki komutu çalıştırın ve sorulara cevap verin.', 'Kurulum sonunda bir commit yapın; TeamBrain değişiklik kaydını otomatik oluşturup hafızaya gönderir.'] };
+  }
   refreshTeamMembers(team) {
     const base = this.teamPath(team), meta = path.join(base, 'team.json');
     if (!fs.existsSync(meta)) throw new Error('Ekip bulunamadı.');

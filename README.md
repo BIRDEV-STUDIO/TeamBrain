@@ -2,6 +2,63 @@
 
 A local-first, Git-backed workspace for reviewed team knowledge, project activity and decision history. Release candidate: the shared-memory protocol is explicit, privacy-first, and offline-capable.
 
+## Install with a terminal AI
+
+Give your terminal AI this exact repository and say **“Install this for my current
+project”**:
+
+```text
+https://github.com/BIRDEV-STUDIO/TeamBrain
+```
+
+The AI must read this README and `AGENTS.md`, clone the public application, install
+its local dependencies, and run the interactive setup command. It must not guess
+the private memory repository, identity, permissions, or startup preference.
+
+On Windows, the implementation flow is:
+
+```powershell
+git clone https://github.com/BIRDEV-STUDIO/TeamBrain C:\TeamBrain
+cd C:\TeamBrain
+npm.cmd install
+node --experimental-sqlite C:\TeamBrain\bin\teambrain.js setup `
+  --repo C:\path\to\the\current\code\repository
+```
+
+The wizard asks for:
+
+1. the exact private GitHub memory repository URL;
+2. the local memory directory;
+3. the user's stable GitHub login / TeamBrain actor identity;
+4. whether automatic synchronization is enabled;
+5. whether TeamBrain starts automatically with Windows;
+6. the team and project names;
+7. one final confirmation showing every change before anything is installed.
+
+After confirmation it verifies/clones the memory repository, creates or reuses the
+team and project, installs a reviewed Git `post-commit` hook, and adds one managed
+TeamBrain block to the code repository's `AGENTS.md`. Existing instructions are
+preserved. Re-running setup updates the managed integration instead of duplicating
+it.
+
+For a reviewed non-interactive deployment, supply every value and `--yes`:
+
+```powershell
+node --experimental-sqlite C:\TeamBrain\bin\teambrain.js setup `
+  --repo C:\work\product `
+  --url https://github.com/ORG/PRIVATE-MEMORY.git `
+  --memory-root C:\TeamBrain-memory `
+  --actor GITHUB_LOGIN `
+  --team-name TEAM `
+  --project-name PRODUCT `
+  --auto-sync true `
+  --startup true `
+  --yes
+```
+
+`--yes` is for automation that has already presented and received approval for the
+exact choices. An AI installer must not use it to bypass the confirmation step.
+
 ## AI installer contract
 
 This README is intended to be read by terminal AI agents. An agent must follow these rules before changing a user's machine or connecting GitHub:
@@ -29,6 +86,14 @@ The actor is a stable GitHub login or TeamBrain identity. Every person uses an i
 
 Do not connect the public TeamBrain software repository as a team's memory repository. Do not put private team memory in the public software repository.
 
+> [!WARNING]
+> This project is not the npm package named `@teambrain/cli` and does not use its
+> global `tb` command or MCP protocol. That package belongs to an unrelated
+> TeamBrain project. This repository is not published to npm; use the checked-out
+> entrypoint `node --experimental-sqlite C:\TeamBrain\bin\teambrain.js ...`.
+> Before trusting an existing `tb` command or `[mcp_servers.teambrain]` entry,
+> inspect where it resolves and confirm that it points to this repository.
+
 The boundaries are intentional: AvenoxBeyin V3 is each user's private working memory; TeamBrain is the reviewed shared source of truth; Obsidian is a human Markdown interface; Serena is limited to code understanding and refactoring. TeamBrain never creates a shared personal vault.
 
 ## Start on Windows
@@ -51,12 +116,143 @@ npm start
 
 Open **http://127.0.0.1:7340**. Keep the terminal running. The older demo on port 7331 is a different process.
 
+### What starts automatically
+
+`Start-TeamBrain.cmd` starts the local dashboard and its synchronization worker.
+It selects the memory workspace in this order:
+
+1. `TEAMBRAIN_MEMORY_ROOT`, when that environment variable is set;
+2. `C:\TeamBrain-memory`, when that Git working tree exists;
+3. `C:\TeamBrain\data` as a local-only fallback.
+
+The terminal window is the running server. Closing it stops that dashboard process
+and its 30-second synchronization loop. If the user approves Windows startup during
+`setup`, TeamBrain installs a user-level startup launcher and starts the local
+dashboard automatically at sign-in. Without that explicit approval it does not add
+a service, scheduled task, or startup application. Merely opening a code repository
+or editing/saving a file does not upload anything.
+
+### What is sent automatically
+
+Automatic synchronization is opt-in in `.teambrain/connection.json`. When
+`auto_sync` is `true` **and the dashboard process is running**, the worker:
+
+1. runs `git pull --rebase --autostash` in the selected memory repository;
+2. stages changes only under `shared/` and `teams/`;
+3. creates a `chore: sync TeamBrain memory` commit when those paths changed;
+4. always attempts to push, including commits left unpushed by an earlier network
+   or authentication failure.
+
+Dashboard writes trigger an immediate sync attempt; the worker also retries every
+30 seconds. Authentication errors, conflicts, or another Git attention state are
+not resolved automatically. The worker records `attention-required` and leaves the
+repository for a human to inspect. The current `sync-state.json` file is a failure
+marker, not a live health source: a later successful sync does not currently remove
+an older marker. Confirm health with `git status`, the remote branch, and a fresh
+dashboard operation.
+
+The synchronized `teams/` scope includes the complete content entered into
+TeamBrain's own team/project chat, notes/events, task and calendar data, project
+metadata, member caches, and extracted Markdown document imports. These are sent
+to the selected memory repository when automatic sync is enabled. TeamBrain does
+**not** silently read or upload arbitrary Codex, Claude, terminal, editor, or
+AvenoxBeyin conversations. Do not enter secrets or unreviewed personal/customer
+data into TeamBrain chat or records merely because the dashboard itself is local.
+
+### What happens to code repository changes
+
+Opening a project or saving source files does nothing by itself. A code repository
+must first be connected explicitly:
+
+```powershell
+node --experimental-sqlite C:\TeamBrain\bin\teambrain.js connect project `
+  --repo C:\path\to\code `
+  --memory-root C:\TeamBrain-memory `
+  --team TEAM_ID `
+  --project PROJECT_ID `
+  --actor YOUR_GITHUB_LOGIN
+```
+
+This installs a Git `post-commit` hook in that code repository. After installation,
+every commit—whether made by a human, an IDE, or a terminal AI—creates a local
+`change.recorded` event in `C:\TeamBrain-memory`. The event contains the commit
+subject, hash, branch, repository name, changed file paths and Git statistics. It
+does not contain the patch/diff body or an AI conversation. The commit event reaches
+GitHub through a one-shot memory synchronization attempt made by the hook; the
+dashboard does not need to be open. If GitHub is unavailable, the Markdown event
+remains local and a later session/dashboard sync retries it. TeamBrain never pushes
+the product/code repository itself.
+
+### Terminal, dashboard, and AI agents
+
+- The dashboard works through the browser at `127.0.0.1:7340`; it is started by the
+  CMD launcher or a terminal command.
+- The CLI is used for connection, diagnosis, context/task reads, publishing,
+  handoffs, explicit synchronization, and hook installation.
+- A Git hook runs on commits regardless of whether the commit came from a terminal,
+  but the hook must have been explicitly installed first.
+- Setup installs a managed `AGENTS.md` contract. Codex CLI and Codex desktop read
+  repository `AGENTS.md` instructions, so they run `session start` for compact team
+  context and assigned tasks, then `session finish` for one reviewed outcome.
+- `session start` first synchronizes the memory repository and returns approved
+  charter/decision/project/knowledge documents within a bounded context budget,
+  recent project activity without full bodies, and tasks assigned to the actor.
+- `session finish` writes one privacy-reviewed `session.summary.recorded` Markdown
+  event and immediately attempts memory synchronization. It never sends the raw
+  agent transcript.
+- Tools that do not honor `AGENTS.md` still receive automatic commit records through
+  Git. A future plugin/MCP bridge may improve richer clients, but is not required for
+  the commit-based shared-memory loop.
+
+### Check whether it is working
+
+```powershell
+# Is the local dashboard listening?
+Test-NetConnection 127.0.0.1 -Port 7340
+
+# Which identity and memory root does the running dashboard expose?
+Invoke-RestMethod http://127.0.0.1:7340/api/identity
+
+# Are the runtime, memory layout, Git identity and remote available?
+node --experimental-sqlite C:\TeamBrain\bin\teambrain.js doctor `
+  --root C:\TeamBrain-memory
+
+# Is the memory repository clean and synchronized?
+git -C C:\TeamBrain-memory status -sb
+git -C C:\TeamBrain-memory remote -v
+
+# Which approved context and assigned tasks are visible?
+node --experimental-sqlite C:\TeamBrain\bin\teambrain.js context `
+  --root C:\TeamBrain-memory
+node --experimental-sqlite C:\TeamBrain\bin\teambrain.js tasks `
+  --root C:\TeamBrain-memory --actor YOUR_GITHUB_LOGIN
+```
+
+`doctor` reporting an optional AI executable as `not-installed` means that CLI
+binary is not on `PATH`; it does not mean the browser dashboard or Git memory is
+broken. Conversely, a listening dashboard alone does not prove Git push access.
+Check all layers: process, memory layout, Git remote/authentication, and repository
+status.
+
 1. Select **Yeni ekip oluştur** and give your team a name.
 2. Press **+** beside **Projeler** to add a project.
 3. Open **Sohbet** to talk with the selected project's local memory. Every message and generated local reply is saved as immutable project history.
 4. Select **Yeni kayıt** to record a note, issue, decision or change.
 5. Switch teams and projects from the sidebar. Each project has its own history.
 6. Open **Aktivite** to search, **Karar defteri** for decisions and a record for its linked history.
+
+When you create a team from the dashboard, TeamBrain now opens a setup guide with
+the exact CMD/PowerShell command for the code repository. The site creates the
+workspace record; run that command once on each developer machine to install the
+Git hook and `AGENTS.md` session instructions. This is intentional: a browser
+cannot safely modify a developer's local code repository without their consent.
+The guide also makes the distinction clear: the code repository is the project
+source, while the private memory repository is the shared TeamBrain data store.
+
+The sidebar includes **Ekibi sil**. An empty accidental team can be removed with
+one confirmation. A team that already contains projects requires typing the team
+name exactly; deletion removes its synchronized team records, so use this only
+for an accidental or intentionally retired team.
 
 The application starts empty. It does not invent teammates, tasks or AI-generated insights. Your data stays in `data/`, separate from source code and excluded from Git.
 
@@ -135,7 +331,7 @@ The `actor` value is the stable member identity in receipts and handoffs; never 
 
 `github create-memory` is the one-command version: it uses the user's existing `gh auth login` session, creates the repository under the selected account or organization, then connects it locally. Private visibility is the default.
 
-`connect project` installs a Git `post-commit` hook. Every commit made by terminal AI or a human becomes a `change.recorded` event in the selected TeamBrain project; the background worker then sends it to GitHub. Only commit metadata and file statistics are captured, never raw terminal conversations.
+`connect project` installs a Git `post-commit` hook. Every commit made by terminal AI or a human becomes a `change.recorded` event in the selected TeamBrain project; the background worker then sends it to GitHub while the dashboard is running and automatic synchronization is enabled. Only commit metadata, changed paths, and file statistics are captured, never patch bodies or raw terminal conversations.
 
 The dashboard can create a team directly from `＋ Ekip oluştur`. Enter the team's exact GitHub repository URL; TeamBrain verifies that the repository is reachable, derives the team name when it is left blank, prevents the same repository from being linked twice, and stores the link in the team's metadata. All projects and chat messages created under that team remain isolated under that GitHub-backed team workspace. The repository must already exist and the current user must have Git access; TeamBrain does not silently create repositories or bypass GitHub permissions.
 

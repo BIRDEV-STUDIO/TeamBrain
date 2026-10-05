@@ -112,6 +112,15 @@ function choose() {
   if (state.team) $('team').value = state.team;
   $('projects').innerHTML = (team()?.projects || []).map(p => `<button data-project="${escape(p.id)}" class="${p.id === state.project ? 'active' : ''}"><span class="project-dot"></span>${escape(p.name)}</button>`).join('');
   $('add-project').disabled = !state.team;
+  $('remove-team').disabled = !state.team;
+}
+async function showSetupGuide(teamId) {
+  try {
+    const guide = await api(`/api/teams/${teamId}`, undefined, 'GET');
+    $('setup-content').innerHTML = `<p>Site ekip kaydını oluşturdu. Kod reposuna otomatik erişemediği için aşağıdaki adımları bir kez uygulayın.</p><ol>${guide.steps.map(step => `<li>${escape(step)}</li>`).join('')}</ol><label for="setup-command">CMD / PowerShell komutu</label><textarea id="setup-command" rows="4" readonly>${escape(guide.command)}</textarea><button class="secondary" id="copy-setup" type="button">Komutu kopyala</button><p class="detail-meta">Kod reposu yolundaki <code>C:\\path\\to\\code</code> bölümünü kendi klasörünüzle değiştirin.</p>`;
+    $('setup-guide').showModal();
+    $('copy-setup').onclick = async () => { await navigator.clipboard.writeText(guide.command); toast('Kurulum komutu panoya kopyalandı.'); };
+  } catch (error) { toast(error.message); }
 }
 async function reloadTeams() {
   if (!state.actors.length) state.actors = (await api('/api/identity')).aliases || [];
@@ -327,6 +336,15 @@ $('content').addEventListener('click', async e => {  const calendarNav = e.targe
   if (action === 'reindex') { try { const result = await api(base() + '/reindex', {}); toast(`${result.indexed} kayıt indekslendi.`); await loadProject(); } catch (error) { toast(error.message); } }
 });
 $('add-team').onclick = () => editor('team');
+$('remove-team').onclick = async () => {
+  const current = team(); if (!current) return;
+  const hasProjects = current.projects?.filter(project => project.id !== 'legacy').length > 0;
+  const promptText = hasProjects ? `Bu ekipte proje var. Silmek için ekip adını aynen yazın: ${current.name}` : `“${current.name}” ekibi silinsin mi?`;
+  const confirmation = hasProjects ? window.prompt(promptText) : (window.confirm(promptText) ? current.name : '');
+  if (!confirmation) return;
+  try { await api(`/api/teams/${current.id}`, { confirmation }, 'DELETE'); state.team = null; state.project = null; state.snapshot = null; toast('Ekip silindi.'); await reloadTeams(); } catch (error) { toast(error.message); }
+};
+$('close-setup').onclick = () => $('setup-guide').close();
 $('upload-document').onclick = () => $('document-file').click();
 $('document-file').addEventListener('change', async event => {
   const file = event.target.files?.[0]; if (!file || !state.team || !state.project) return;
@@ -357,6 +375,7 @@ $('editor-form').addEventListener('submit', async e => {
     $('editor').close();
     toast('Kaydedildi.');
     await reloadTeams();
+    if (state.mode === 'team') await showSetupGuide(state.team);
   } catch (error) {
     $('form-error').textContent = error.message;
   } finally {

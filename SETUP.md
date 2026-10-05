@@ -1,5 +1,18 @@
 # TeamBrain setup for a new team
 
+## Recommended AI-guided setup
+
+Give a terminal AI `https://github.com/BIRDEV-STUDIO/TeamBrain` and ask it to
+install TeamBrain for the current code repository. After cloning this public
+application and running `npm.cmd install` on Windows, the AI must run:
+
+`node --experimental-sqlite C:\TeamBrain\bin\teambrain.js setup --repo C:\path\to\code`
+
+The interactive wizard confirms the exact private memory repository, local path,
+actor, automatic sync, Windows startup, team and project before installing any
+hook or managed project instruction. This is the preferred path because it combines
+the steps below without silently guessing repository boundaries.
+
 1. Install Git, Node.js 22.18+, and optionally `gh`.
 2. Create a repository under the team's GitHub organization (private is recommended), either in GitHub or directly from TeamBrain:
 
@@ -16,9 +29,9 @@
 
 7. Connect each code repository once:
 
-   `node C:\TeamBrain\bin\teambrain.js connect project --repo C:\path\to\code --memory-root C:\TeamBrain-memory --team TEAM_ID --project PROJECT_ID --actor LOGIN`
+   `node --experimental-sqlite C:\TeamBrain\bin\teambrain.js connect project --repo C:\path\to\code --memory-root C:\TeamBrain-memory --team TEAM_ID --project PROJECT_ID --actor LOGIN --install-instructions true`
 
-   The hook records every commit automatically. Start TeamBrain with `Start-TeamBrain.bat`; the connected memory repository is used automatically.
+   The hook records every commit as Markdown and immediately attempts memory synchronization. The managed `AGENTS.md` block gives compatible terminal/desktop agents compact approved context at session start and records one reviewed outcome at session finish. Start TeamBrain with `Start-TeamBrain.cmd` for the dashboard; if Windows startup was approved during setup, it starts automatically at sign-in.
 
 ## Dashboard team setup
 

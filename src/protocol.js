@@ -4,6 +4,14 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const {loadProjectMemoryExport,publishInitialProjectMemory}=require('./project-memory-import');
 const SHARED = ['00-charter','10-decisions','20-projects','30-knowledge','40-handoffs','90-receipts/pending','99-archive'];
+const GITIGNORE_START='# teambrain:managed-ignore:start', GITIGNORE_END='# teambrain:managed-ignore:end';
+function ensureMemoryGitignore(root) {
+  const file=path.join(root,'.gitignore'); let current=fs.existsSync(file)?fs.readFileSync(file,'utf8'):'';
+  current=current.replace(/^\.teambrain\/\s*$/m,'/.teambrain/');
+  const block=`${GITIGNORE_START}\n/.teambrain/\n**/.teambrain/index.sqlite*\n**/.teambrain/*.log\n**/.teambrain/views/\n**/.teambrain/project-chat/\n**/.teambrain/team-chat/\n**/.teambrain/members.json\n${GITIGNORE_END}`;
+  const start=current.indexOf(GITIGNORE_START), end=current.indexOf(GITIGNORE_END); if(start>=0&&end>=start) current=current.slice(0,start)+block+current.slice(end+GITIGNORE_END.length); else current=`${current.trim()}${current.trim()?'\n':''}${block}\n`;
+  fs.writeFileSync(file,current.endsWith('\n')?current:`${current}\n`); return file;
+}
 function askQuestion(prompt, fallback = '') {
   const readline=require('node:readline'); const io=readline.createInterface({input:process.stdin,output:process.stdout});
   return new Promise(resolve=>io.question(`${prompt}${fallback ? ` [${fallback}]` : ''}: `,answer=>{io.close();resolve(answer.trim() || fallback);}));
@@ -16,12 +24,13 @@ async function askAutoSync(value) {
   const answer=await new Promise(resolve=>io.question('TeamBrain bu seçili memory repo’sunu arka planda otomatik senkronize etsin mi? (e/h): ',resolve)); io.close();
   return /^e|evet|y|yes$/i.test(answer.trim());
 }
-async function askConnectionSetup({url, destination, actor, autoSync}) {
+async function askConnectionSetup({url, destination, actor, autoSync, confirmed}) {
+  if (confirmed === true) return {url,destination,actor,autoSync,initialContribution:null};
   if (!process.stdin.isTTY) return { url, destination, actor, autoSync };
   console.log('\nTeamBrain GitHub bağlantısını birlikte kuralım.');
   url = url || await askQuestion('GitHub memory repo URL’si');
-  const confirmed = await askQuestion(`Bu repo bağlansın mı? ${url}`, 'e');
-  if (!/^e|evet|y|yes$/i.test(confirmed)) throw new Error('GitHub bağlantısı iptal edildi.');
+  const repositoryConfirmed = await askQuestion(`Bu repo bağlansın mı? ${url}`, 'e');
+  if (!/^e|evet|y|yes$/i.test(repositoryConfirmed)) throw new Error('GitHub bağlantısı iptal edildi.');
   destination = destination || await askQuestion('Bu hafıza yerelde nereye kaydedilsin?', path.join(process.cwd(), 'teambrain-memory'));
   actor = actor || await askQuestion('TeamBrain kullanıcı kimliğin nedir?', process.env.USERNAME || process.env.USER || 'unknown');
   if (autoSync === undefined) autoSync = await askAutoSync(autoSync);
@@ -45,13 +54,16 @@ async function askConnectionSetup({url, destination, actor, autoSync}) {
   if (!/^e|evet|y|yes$/i.test(ready)) throw new Error('GitHub bağlantısı iptal edildi.');
   return { url, destination, actor, autoSync, initialContribution };
 }
-async function connectGithub(url, destination, actor, autoSync) {
+async function connectGithub(url, destination, actor, autoSync, confirmed=false) {
   let initialContribution;
-  ({ url, destination, actor, autoSync, initialContribution } = await askConnectionSetup({url, destination, actor, autoSync}));
+  ({ url, destination, actor, autoSync, initialContribution } = await askConnectionSetup({url, destination, actor, autoSync, confirmed}));
   if (typeof url !== 'string' || !/^(https:\/\/github\.com\/[^/\s]+\/[^/\s]+(?:\.git)?|git@github\.com:[^/\s]+\/[^/\s]+(?:\.git)?)$/.test(url)) throw new Error('Use a GitHub HTTPS or SSH repository URL.');
   const {execFileSync}=require('node:child_process'); const target=path.resolve(destination || path.join(process.cwd(),'teambrain-memory'));
   if (!fs.existsSync(path.join(target,'.git'))) { if (fs.existsSync(target) && fs.readdirSync(target).length) throw new Error(`Destination is not empty: ${target}`); execFileSync('git',['clone',url,target],{stdio:'inherit'}); }
   const remote=execFileSync('git',['-C',target,'remote','get-url','origin'],{encoding:'utf8'}).trim();
+  const canonical=value=>String(value).trim().replace(/\.git$/i,'').replace(/\/$/,'').toLowerCase();
+  if(canonical(remote)!==canonical(url)) throw new Error(`Existing destination points to a different repository: ${remote}`);
+  ensureMemoryGitignore(target);
   const automatic=await askAutoSync(autoSync); const connection=path.join(target,'.teambrain','connection.json'); fs.mkdirSync(path.dirname(connection),{recursive:true}); fs.writeFileSync(connection,JSON.stringify({schema_version:1,provider:'github',remote,actor_id:actor||process.env.USERNAME||'unknown',connected_at:new Date().toISOString(),auto_sync:automatic,sync:automatic?'background':'manual',sync_scope:['shared','teams']},null,2)+'\n');
   bootstrap(target, path.basename(target));
   const initial_contribution=initialContribution ? publishInitialProjectMemory(target,initialContribution,actor||process.env.USERNAME||'unknown',publish) : null;
@@ -98,4 +110,4 @@ function handoff(root, options) {
   const file=path.join(root,'shared','40-handoffs',`${id}.md`); const body=`---\nschema_version: 1\nhandoff_id: ${id}\nproject_id: ${options.project||'teambrain'}\nfrom: ${options.from||process.env.USERNAME||'unknown'}\nto: ${options.to||'unassigned'}\ncreated_at: ${new Date().toISOString()}\nstatus: open\n---\n\n# Handoff\n\n${options.summary}\n\n## Sources\n\n${String(options.sources||'manual').split(',').map(x=>`- ${x.trim()}`).join('\n')}\n`;
   writeJsonExclusive(file+'.lock',{created_at:new Date().toISOString()}); fs.writeFileSync(file,body,{flag:'wx'}); fs.unlinkSync(file+'.lock'); return {created:true,file};
 }
-module.exports={bootstrap,doctor,publish,handoff,connectGithub,createGithubMemory,SHARED};
+module.exports={bootstrap,doctor,publish,handoff,connectGithub,createGithubMemory,ensureMemoryGitignore,SHARED};

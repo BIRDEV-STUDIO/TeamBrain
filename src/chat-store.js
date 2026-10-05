@@ -1,6 +1,7 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
+const { writeJsonAtomic } = require('./atomic-file');
 
 function file(root, scope = 'project') { return path.join(root, 'collaboration', 'chat', scope === 'team' ? 'team.json' : 'project.json'); }
 function read(root, scope = 'project') {
@@ -14,10 +15,7 @@ function read(root, scope = 'project') {
   } catch { return { schema_version: 1, messages: [] }; }
 }
 function save(root, data, scope = 'project') {
-  const target = file(root, scope), temp = `${target}.${process.pid}.tmp`;
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(temp, JSON.stringify(data, null, 2) + '\n');
-  fs.renameSync(temp, target);
+  writeJsonAtomic(file(root, scope), data);
 }
 function append(root, event, scope = 'project') {
   const data = read(root, scope);

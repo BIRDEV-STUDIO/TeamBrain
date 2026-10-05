@@ -2,9 +2,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { writeJsonAtomic } = require('./atomic-file');
 function file(root) { return path.join(root, 'collaboration', 'planner.json'); }
 function read(root) { const target = file(root), legacy = path.join(root, '.teambrain', 'planner.json'), source = fs.existsSync(target) ? target : legacy; if (!fs.existsSync(source)) return { schema_version: 1, calendar: [], tasks: [] }; const data = JSON.parse(fs.readFileSync(source, 'utf8')); return { schema_version: 1, calendar: Array.isArray(data.calendar) ? data.calendar : [], tasks: Array.isArray(data.tasks) ? data.tasks : [] }; }
-function save(root, data) { const target = file(root); const temp = `${target}.${process.pid}.tmp`; fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(temp, JSON.stringify(data, null, 2) + '\n'); fs.renameSync(temp, target); }
+function save(root, data) { writeJsonAtomic(file(root), data); }
 function text(value, name, max = 200) { if (typeof value !== 'string' || !value.trim() || value.length > max) throw new Error(`${name} 1–${max} karakter olmalı.`); return value.trim(); }
 function optionalDate(value, name) { if (!value) return null; if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(value)) throw new Error(`${name} geçerli bir tarih olmalı.`); return value; }
 function planner(root) { return read(root); }

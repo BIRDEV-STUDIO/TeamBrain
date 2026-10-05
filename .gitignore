@@ -3,6 +3,7 @@ node_modules/
 .teambrain/*.log
 .teambrain/views/
 coverage/
+.test-tmp*/
 data/
 work/
 outputs/

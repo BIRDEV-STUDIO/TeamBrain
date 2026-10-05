@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "receipt_id": "2026-10-05-dashboard-notification-center",
+  "project_id": "teambrain",
+  "actor_id": "codex",
+  "created_at": "2026-10-05T23:58:00+03:00",
+  "summary": "Added a two-section dashboard notification center for general and selected-repository activity, kept the important TeamBrain setup guide recoverable from repository notifications, and added a copyable recommended AI-agent setup prompt that preserves exact repository boundaries and requires final user confirmation before installation changes.",
+  "sources": [
+    "public/index.html",
+    "public/app.js",
+    "public/notifications.css",
+    "src/workspace.js",
+    "test/workspace.test.js",
+    "test/notifications.test.js"
+  ],
+  "privacy_review": true,
+  "status": "pending",
+  "related_decisions": [],
+  "related_commits": [],
+  "follow_ups": [
+    "Human-review the pending receipt before promoting it to canonical shared knowledge."
+  ]
+}

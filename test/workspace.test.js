@@ -109,6 +109,10 @@ test('teams can be removed safely and setup guidance is generated', () => {
     workspace.createProject(team.id, 'Accidental project');
     const guide = workspace.setupGuide(team.id);
     assert.match(guide.command, /acme\/memory\.git/);
+    assert.match(guide.command, new RegExp(path.join('bin', 'teambrain.js').replace(/\\/g, '\\\\')));
+    assert.doesNotMatch(guide.command, /^node --experimental-sqlite C:\\TeamBrain\\/);
+    assert.match(guide.agent_prompt, /yalnızca şu kesin URL'yi kullan: https:\/\/github\.com\/acme\/memory\.git/);
+    assert.match(guide.agent_prompt, /tüm son seçimleri kullanıcıya göster ve onaylat/);
     assert.throws(() => workspace.deleteTeam(team.id, { confirmation: 'wrong' }), /proje var/);
     assert.equal(workspace.deleteTeam(team.id, { confirmation: team.name }).deleted, true);
     assert.equal(workspace.teams().length, 0);
@@ -146,8 +150,11 @@ test('dashboard HTTP onboarding, input checks, security headers and cross-origin
     const html = await fetch(base);
     assert.match(await html.text(), /app.js/);
     assert.match(html.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+    assert.equal((await fetch(base + '/favicon.svg')).status, 200);
     assert.equal((await fetch(base + '/notifications.js')).status, 200);
-    assert.equal((await fetch(base + '/notifications.css')).status, 200);
+    const notificationCss = await fetch(base + '/notifications.css');
+    assert.equal(notificationCss.status, 200);
+    assert.match(await notificationCss.text(), /@keyframes loading-dot/);
     const identity = await (await fetch(base + '/api/identity')).json();
     assert.ok(identity.actor);
     assert.ok(identity.aliases.includes(identity.actor));

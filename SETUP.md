@@ -13,6 +13,10 @@ actor, automatic sync, Windows startup, team and project before installing any
 hook or managed project instruction. This is the preferred path because it combines
 the steps below without silently guessing repository boundaries.
 
+The dashboard-generated command uses the actual TeamBrain checkout path, so users
+may clone the public application outside `C:\TeamBrain`; the paths below are only
+Windows examples.
+
 1. Install Git, Node.js 22.18+, and optionally `gh`.
 2. Create a repository under the team's GitHub organization (private is recommended), either in GitHub or directly from TeamBrain:
 

@@ -1,5 +1,5 @@
 'use strict';
-const path = require('node:path'); const fs = require('node:fs');
+const path = require('node:path'); const fs = require('node:fs'); const { spawn } = require('node:child_process');
 const { init, load } = require('./config'); const { createEvent } = require('./event'); const { writeEvent, readEvent, listEventFiles } = require('./store'); const { openIndex, indexEvent, timeline, why, eventChain, clearIndex } = require('./index'); const { MemorySync } = require('./git-sync');
 const { dailySummary, writeDailyView } = require('./views');
 const { planner } = require('./planner');
@@ -13,6 +13,12 @@ const { Workspace } = require('./workspace');
 function parse(args) { const options = {}; const positional = []; for (let i=0;i<args.length;i++) { if (args[i].startsWith('--')) { const key=args[i].slice(2); const next=args[i+1]; options[key] = next && !next.startsWith('--') ? args[++i] : true; } else positional.push(args[i]); } return { positional, options }; }
 function root(options) { return path.resolve(options.root || process.cwd()); }
 function print(rows) { console.log(JSON.stringify(rows, null, 2)); }
+function openDashboard(url) {
+  const target = process.platform === 'win32'
+    ? ['rundll32.exe', ['url.dll,FileProtocolHandler', url]]
+    : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+  try { const child = spawn(target[0], target[1], { detached: true, stdio: 'ignore', windowsHide: true }); child.on('error', () => {}); child.unref(); } catch {}
+}
 async function run(args) {
   const { positional: p, options } = parse(args); const command = p.join(' '); const workspace = root(options);
   if (command === 'bootstrap') { print(protocol.bootstrap(workspace, options.project)); return; }
@@ -39,7 +45,9 @@ async function run(args) {
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid port');
     const server = createDashboardServer(workspace);
     await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
-    console.log(`TeamBrain: http://127.0.0.1:${port} | Workspace: ${workspace}`);
+    const dashboardUrl = `http://127.0.0.1:${port}`;
+    console.log(`TeamBrain: ${dashboardUrl} | Workspace: ${workspace}`);
+    if (options.open === true || options.open === 'true') openDashboard(dashboardUrl);
     return;
   }
   if (command === 'team list') { print(listTeams(workspace)); return; }

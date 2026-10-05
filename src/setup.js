@@ -11,7 +11,7 @@ async function prompt(rl,label,fallback) { const answer=(await rl.question(`${la
 function enableWindowsStartup(memoryRoot) {
   if(process.platform!=='win32') return {installed:false,reason:'Windows startup is only available on Windows.'};
   const startup=path.join(process.env.APPDATA,'Microsoft','Windows','Start Menu','Programs','Startup'); fs.mkdirSync(startup,{recursive:true}); const file=path.join(startup,'TeamBrain-Autostart.cmd'); const node=process.execPath; const script=path.resolve(__dirname,'..','bin','teambrain.js');
-  fs.writeFileSync(file,`@echo off\r\nstart "TeamBrain" /min "${node}" --experimental-sqlite "${script}" dashboard --root "${path.resolve(memoryRoot)}" --port 7340\r\n`); return {installed:true,file};
+  fs.writeFileSync(file,`@echo off\r\nstart "TeamBrain" /min "${node}" --experimental-sqlite "${script}" dashboard --root "${path.resolve(memoryRoot)}" --port 7340 --open\r\n`); return {installed:true,file};
 }
 async function setup(options={}) {
   const interactive=process.stdin.isTTY&&!yes(options.yes,false); const rl=interactive?readline.createInterface({input:process.stdin,output:process.stdout}):null;

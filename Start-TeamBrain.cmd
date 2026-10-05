@@ -8,9 +8,15 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+node -e "const [major,minor]=process.versions.node.split('.').map(Number);process.exit(major>22||(major===22&&minor>=18)?0:1)"
+if errorlevel 1 (
+  echo TeamBrain icin Node.js 22.18 veya daha yeni bir surum gerekli.
+  echo https://nodejs.org adresinden guncelleyip tekrar acin.
+  pause
+  exit /b 1
+)
 echo TeamBrain http://127.0.0.1:7340 adresinde aciliyor.
 echo Bu pencereyi kapatmak sunucuyu durdurur.
-start "" "http://127.0.0.1:7340"
 if defined TEAMBRAIN_MEMORY_ROOT (
   set "MEMORY_ROOT=%TEAMBRAIN_MEMORY_ROOT%"
 ) else if exist "C:\TeamBrain-memory\.git" (
@@ -19,5 +25,5 @@ if defined TEAMBRAIN_MEMORY_ROOT (
   set "MEMORY_ROOT=%~dp0data"
 )
 echo Memory: %MEMORY_ROOT%
-node --experimental-sqlite bin\teambrain.js dashboard --root "%MEMORY_ROOT%" --port 7340
+node --experimental-sqlite bin\teambrain.js dashboard --root "%MEMORY_ROOT%" --port 7340 --open
 pause

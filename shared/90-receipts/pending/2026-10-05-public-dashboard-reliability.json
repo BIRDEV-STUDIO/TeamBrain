@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "receipt_id": "2026-10-05-public-dashboard-reliability",
+  "project_id": "teambrain",
+  "actor_id": "codex",
+  "created_at": "2026-10-05T23:59:00+03:00",
+  "summary": "Prepared the public TeamBrain application for a smoother installation and dashboard experience: moved animated action feedback into the always-served stylesheet, generated setup commands from the actual checkout path, opened the dashboard only after the server starts, aligned Node.js requirements, made common text imports Python-free, added retrying atomic chat/planner writes, and made npm test run the complete suite cross-platform.",
+  "sources": [
+    "Start-TeamBrain.cmd",
+    "README.md",
+    "SETUP.md",
+    "package.json",
+    "public/notifications.css",
+    "src/atomic-file.js",
+    "src/chat-store.js",
+    "src/cli.js",
+    "src/document-import.js",
+    "src/planner.js",
+    "src/setup.js",
+    "src/workspace.js",
+    "test/run-all.js",
+    "test/workspace.test.js"
+  ],
+  "privacy_review": true,
+  "status": "pending",
+  "related_decisions": [],
+  "related_commits": [],
+  "follow_ups": [
+    "Human-review the pending receipt before promoting it to canonical shared knowledge."
+  ]
+}

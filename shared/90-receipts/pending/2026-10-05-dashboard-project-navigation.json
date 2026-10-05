@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "receipt_id": "2026-10-05-dashboard-project-navigation",
+  "project_id": "teambrain",
+  "actor_id": "codex",
+  "created_at": "2026-10-05T23:00:00+03:00",
+  "summary": "Fixed dashboard navigation when the first team has no projects. Startup now prefers a valid remembered selection or the first team with a project, team/project choices persist locally, project-independent connections remain accessible, and project-scoped views show distinct guidance instead of appearing stuck on one shared empty screen.",
+  "sources": [
+    "public/app.js",
+    "test/**/*.test.js"
+  ],
+  "privacy_review": true,
+  "status": "pending",
+  "related_decisions": [],
+  "related_commits": [],
+  "follow_ups": [
+    "Human-review the pending receipt before promoting it to canonical shared knowledge."
+  ]
+}

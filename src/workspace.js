@@ -119,10 +119,15 @@ class Workspace {
     try { memoryRemote = JSON.parse(fs.readFileSync(path.join(this.root, '.teambrain', 'connection.json'), 'utf8')).remote || ''; } catch {}
     const project = selected.projects.find(item => item.id !== 'legacy') || { id: 'PROJECT_ID', name: 'Proje adı' };
     const memoryRoot = this.root.replace(/\\/g, '\\\\');
+    const cliPath = path.resolve(__dirname, '..', 'bin', 'teambrain.js');
+    const codePlaceholder = process.platform === 'win32' ? 'C:\\path\\to\\code' : '/path/to/code';
     const command = memoryRemote
-      ? `node --experimental-sqlite C:\\TeamBrain\\bin\\teambrain.js setup --repo C:\\path\\to\\code --url ${memoryRemote} --memory-root "${memoryRoot}" --team-name "${selected.name}" --project-name "${project.name}"`
+      ? `node --experimental-sqlite "${cliPath}" setup --repo "${codePlaceholder}" --url "${memoryRemote}" --memory-root "${memoryRoot}" --team-name "${selected.name}" --project-name "${project.name}"`
       : 'Önce özel TeamBrain-memory GitHub reposunu Bağlantılar bölümünden bağlayın.';
-    return { team: { id: selected.id, name: selected.name }, memory_repository: memoryRemote || null, project, command, steps: ['Kod reposunu bilgisayarınıza klonlayın.', 'Terminali kod reposunun klasöründe açın.', 'Aşağıdaki komutu çalıştırın ve sorulara cevap verin.', 'Kurulum sonunda bir commit yapın; TeamBrain değişiklik kaydını otomatik oluşturup hafızaya gönderir.'] };
+    const agentPrompt = memoryRemote
+      ? `Bu kod reposuna TeamBrain kur. TeamBrain uygulaması şu klasörde hazır: ${path.resolve(__dirname, '..')}. Önce üzerinde çalıştığın kod reposunun tam yerel yolunu doğrula. TeamBrain hafıza reposu olarak yalnızca şu kesin URL'yi kullan: ${memoryRemote}. Hafıza hedefi: ${this.root}. Ekip: ${selected.name}. Proje: ${project.name}. Kararlı TeamBrain actor kimliğini GitHub kullanıcı girişinden doğrula; kişiyi e-posta veya görünen addan tahmin etme. Otomatik senkron, başlangıç ayarı, ekip ve proje seçimlerini kullanıcıyla birlikte tamamla. Herhangi bir repo klonlamadan, hook kurmadan, AGENTS.md dosyasını değiştirmeden veya bağlantı dosyası yazmadan önce tüm son seçimleri kullanıcıya göster ve onaylat. Ardından TeamBrain'in etkileşimli setup sihirbazını bu kod reposunun kesin yerel yolu ile çalıştır, kurulumu doğrula ve sonucu özetle. Repo URL'sini tahmin etme, değiştirme veya başka bir repo ile ikame etme.`
+      : 'Önce kullanıcıdan kesin özel TeamBrain-memory GitHub repo URL’sini iste; URL’yi tahmin etme veya ikame etme. Ardından son kurulum seçimlerini kullanıcıya gösterip onay aldıktan sonra TeamBrain setup sihirbazını çalıştır.';
+    return { team: { id: selected.id, name: selected.name }, memory_repository: memoryRemote || null, project, command, agent_prompt: agentPrompt, steps: ['Kod reposunu bilgisayarınıza klonlayın.', 'Terminali kod reposunun klasöründe açın.', 'Aşağıdaki komutu çalıştırın ve sorulara cevap verin.', 'Kurulum sonunda bir commit yapın; TeamBrain değişiklik kaydını otomatik oluşturup hafızaya gönderir.'] };
   }
   refreshTeamMembers(team) {
     const base = this.teamPath(team), meta = path.join(base, 'team.json');

@@ -4,3 +4,69 @@ nav button.has-unread::after{content:attr(data-unread);position:absolute;right:1
 nav button.active.has-unread::after{background:#285d4b;color:#fff}
 @keyframes notification-pulse{0%{box-shadow:0 0 0 0 #d5ef9c99;filter:brightness(1.15)}65%{box-shadow:0 0 0 7px #d5ef9c00;filter:brightness(1)}100%{box-shadow:0 0 0 0 #d5ef9c00}}
 @media(prefers-reduced-motion:reduce){nav button.has-unread::after{animation:none}}
+
+.notification-center{position:relative}
+.notification-button{position:relative;width:36px;height:36px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink);font-size:22px;line-height:1;display:grid;place-items:center}
+.notification-button b{position:absolute;right:-5px;top:-5px;min-width:18px;height:18px;padding:0 4px;border-radius:10px;background:#d5ef9c;color:#1e3830;border:2px solid var(--bg);font-size:9px;line-height:14px}
+.notifications-panel{position:absolute;right:0;top:45px;width:min(410px,calc(100vw - 32px));max-height:min(610px,calc(100vh - 90px));overflow:hidden;border:1px solid var(--line);border-radius:15px;background:var(--paper);color:var(--ink);box-shadow:0 24px 70px #102c3a2b;z-index:20}
+.notifications-heading{display:flex;justify-content:space-between;align-items:center;padding:17px 18px 12px}
+.notifications-heading strong{display:block;font-size:16px;margin-top:2px}
+.notifications-heading .icon-button{font-size:22px}
+.notification-tabs{display:grid;grid-template-columns:1fr 1fr;padding:0 14px;border-bottom:1px solid var(--line)}
+.notification-tabs button{position:relative;padding:10px 8px;background:transparent;color:var(--muted);font-size:11px;font-weight:700}
+.notification-tabs button[aria-selected="true"]{color:var(--ink)}
+.notification-tabs button[aria-selected="true"]::after{content:"";position:absolute;left:10px;right:10px;bottom:-1px;height:2px;background:var(--green);border-radius:2px}
+.notification-tabs span:not(:empty){display:inline-grid;place-items:center;min-width:17px;height:17px;margin-left:4px;padding:0 4px;border-radius:9px;background:#d5ef9c;color:#1e3830;font-size:9px}
+.notifications-list{max-height:480px;overflow:auto;padding:8px}
+.notification-item{width:100%;display:block;padding:12px;border-radius:10px;background:transparent;color:var(--ink);text-align:left;border:1px solid transparent}
+.notification-item:hover{background:#f2f6ed;border-color:var(--line);filter:none!important}
+.notification-item.important{background:#eef6df;border-color:#d9e9bd}
+.notification-item strong,.notification-item small,.notification-item span{display:block}
+.notification-item strong{font-size:12px;margin-bottom:3px}
+.notification-item span{font-size:11px;color:var(--muted);line-height:1.45}
+.notification-item small{margin-top:5px;color:#89968a;font-size:9px;text-transform:uppercase;letter-spacing:.5px}
+.notification-empty{padding:30px 20px;text-align:center;color:var(--muted);font-size:11px}
+:root.dark .notification-button,:root.dark .notifications-panel{background:var(--paper);border-color:var(--line)}
+:root.dark .notification-item:hover{background:#293b34}
+:root.dark .notification-item.important{background:#30452f;border-color:#526c48}
+@media(max-width:700px){.notifications-panel{position:fixed;top:62px;right:10px;left:10px;width:auto;max-height:calc(100vh - 74px)}.notifications-list{max-height:calc(100vh - 190px)}}
+
+/* Shared interaction feedback lives in an asset every dashboard version already serves. */
+.loading-dots{display:inline-flex;align-items:center;gap:4px;margin-left:8px;vertical-align:middle}
+.loading-dots i{display:block;width:5px;height:5px;border-radius:50%;background:currentColor;animation:loading-dot 1.05s infinite ease-in-out both}
+.loading-dots i:nth-child(2){animation-delay:.16s}
+.loading-dots i:nth-child(3){animation-delay:.32s}
+@keyframes loading-dot{0%,70%,100%{opacity:.3;transform:translateY(1px) scale(.75)}35%{opacity:1;transform:translateY(-3px) scale(1)}}
+button[aria-busy="true"]{display:inline-flex;align-items:center;justify-content:center;opacity:.78}
+.month-cell{display:block;width:100%;color:inherit;text-align:left;border-top:0;border-left:0;border-radius:0}
+.month-cell:hover:not(:disabled){filter:none;background:#f6f9f1}
+.month-cell.selected{position:relative;background:#eef6df;box-shadow:inset 0 0 0 2px #83a65f;z-index:1}
+:root.dark .month-cell.selected{background:#304b3c;box-shadow:inset 0 0 0 2px #9fc47a}
+:root.dark .month-cell:hover:not(:disabled){background:#273a33}
+.calendar-chip{display:block}
+.calendar-active{overflow:hidden}
+.calendar-active main{padding-top:14px;padding-bottom:10px}
+.calendar-active .page-heading{margin-bottom:10px}
+.calendar-active .page-heading h1{font-size:25px;margin:2px 0}
+.calendar-active .page-heading .eyebrow,.calendar-active .page-heading p{display:none}
+.calendar-active .calendar-heading{margin-bottom:9px;align-items:center}
+.calendar-active .calendar-heading h2{font-size:25px;margin:0}
+.calendar-active .calendar-panel{height:calc(100dvh - 244px);display:grid;grid-template-rows:auto minmax(0,1fr)}
+.calendar-active .month-grid{min-height:0;grid-template-rows:repeat(6,minmax(0,1fr))}
+.calendar-active .month-cell{min-height:0;padding:6px 8px}
+.calendar-active .cell-number{width:22px;height:22px;margin-bottom:2px}
+.calendar-active .calendar-chip{padding:2px 5px;margin:2px 0}
+.calendar-active .calendar-legend{margin-top:7px}
+.calendar-active footer{display:none}
+.recommended-setup{margin:20px 0;padding:18px;border:1px solid #d5e7b8;border-radius:12px;background:#f1f7e7}
+.recommended-setup h3{margin:9px 0 5px;font-size:15px}
+.recommended-setup p{font-size:11px}
+.recommended-setup textarea{background:#fff;min-height:145px}
+.recommended-setup .primary{margin-top:10px}
+.setup-divider{display:flex;align-items:center;gap:12px;margin:22px 0 14px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px}
+.setup-divider::before,.setup-divider::after{content:"";height:1px;flex:1;background:var(--line)}
+:root.dark .recommended-setup{background:#2b4035;border-color:#526c48}
+:root.dark .recommended-setup textarea{background:#20302b}
+@media(max-width:800px){.calendar-active{overflow:auto}.calendar-active .calendar-panel{height:auto}.calendar-active .month-cell{min-height:95px}.calendar-active footer{display:flex}}
+@media(max-height:700px) and (min-width:801px){.calendar-active .topbar{height:58px}.calendar-active .calendar-panel{height:calc(100dvh - 210px)}.calendar-active .weekdays span{padding:7px 10px}.calendar-active .calendar-chip{font-size:9px}.calendar-active .calendar-legend{display:none}}
+@media(prefers-reduced-motion:reduce){.loading-dots i{animation-duration:2s;transform:none}}

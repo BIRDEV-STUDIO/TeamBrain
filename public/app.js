@@ -1,7 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const state = { teams: [], team: null, project: null, snapshot: null, teamChat: [], actors: [], memberRefresh: {}, chatScope: 'team', view: 'overview', calendarCursor: new Date(), query: '', type: '', mode: null, version: 0 };
+const state = { teams: [], team: null, project: null, snapshot: null, teamChat: [], actors: [], memberRefresh: {}, chatScope: 'team', view: 'overview', calendarCursor: new Date(), selectedCalendarDate: null, notificationSection: 'general', updateInfo: null, query: '', type: '', mode: null, version: 0 };
 const notificationTracker = new TeamBrainNotifications.NotificationTracker(localStorage);
 const names = {
   'note.created': 'Not',
@@ -27,9 +27,11 @@ $('theme-toggle').addEventListener('click',()=>{const dark=document.documentElem
 async function checkForUpdate() {
   try {
     const update = await api('/api/update'); const notice = $('update-notice');
+    state.updateInfo = update.available ? update : null;
+    renderNotificationCenter();
     if (!update.available || localStorage.getItem('teambrain-dismissed-update') === update.latest) { notice.hidden = true; return; }
     notice.innerHTML = `<span>Yeni TeamBrain sürümü hazır: <strong>${escape(update.name || update.latest)}</strong> · Mevcut sürüm ${escape(update.current)}</span><span><a href="${escape(update.url)}" target="_blank" rel="noreferrer">Sürüm notlarını aç ↗</a> <button type="button" id="dismiss-update" aria-label="Bildirimi kapat">×</button></span>`;
-    notice.hidden = false; $('dismiss-update').onclick = () => { localStorage.setItem('teambrain-dismissed-update', update.latest); notice.hidden = true; };
+    notice.hidden = false; $('dismiss-update').onclick = () => { localStorage.setItem('teambrain-dismissed-update', update.latest); notice.hidden = true; renderNotificationCenter(); };
   } catch {}
 }
 
@@ -46,10 +48,51 @@ function toast(message) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => $('toast').classList.remove('visible'), 5500);
 }
+function loadingDots() { return '<span class="loading-dots" aria-hidden="true"><i></i><i></i><i></i></span>'; }
+function setButtonBusy(button, busy, label = 'İşleniyor') {
+  if (!button) return;
+  if (busy) {
+    if (!button.dataset.idleHtml) button.dataset.idleHtml = button.innerHTML;
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.innerHTML = `<span>${escape(label)}</span>${loadingDots()}`;
+  } else {
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+    if (button.dataset.idleHtml) button.innerHTML = button.dataset.idleHtml;
+    delete button.dataset.idleHtml;
+  }
+}
 function base() { return `/api/teams/${state.team}/projects/${state.project}`; }
 function team() { return state.teams.find(t => t.id === state.team); }
 function events() { return state.snapshot?.events || []; }
 function chatEvents() { return state.chatScope === 'team' ? state.teamChat : events().filter(e => e.event_type === 'chat.message' || e.event_type === 'chat.reply.generated').reverse(); }
+function rememberSelection() {
+  try {
+    if (state.team) localStorage.setItem('teambrain-selected-team', state.team);
+    else localStorage.removeItem('teambrain-selected-team');
+    if (state.project) localStorage.setItem('teambrain-selected-project', state.project);
+    else localStorage.removeItem('teambrain-selected-project');
+  } catch {}
+}
+function restoreSelection() {
+  let savedTeam = null, savedProject = null;
+  try {
+    savedTeam = localStorage.getItem('teambrain-selected-team');
+    savedProject = localStorage.getItem('teambrain-selected-project');
+  } catch {}
+  if (!team()) {
+    state.team = state.teams.find(item => item.id === savedTeam)?.id
+      || state.teams.find(item => item.projects?.length)?.id
+      || state.teams[0]?.id
+      || null;
+  }
+  const projects = team()?.projects || [];
+  if (!projects.some(project => project.id === state.project)) {
+    state.project = projects.find(project => project.id === savedProject)?.id || projects[0]?.id || null;
+  }
+  rememberSelection();
+}
 
 function teamNotificationScope() { return state.team ? `team:${state.team}` : null; }
 function projectNotificationScope() { return state.team && state.project ? `team:${state.team}:project:${state.project}` : null; }
@@ -99,12 +142,69 @@ function renderNotificationLights() {
     }
   });
 }
+function setupSeenKey(teamId = state.team) { return `teambrain-setup-seen:${teamId || 'none'}`; }
+function notificationSectionCounts() {
+  const teamCounts = notificationTracker.counts(teamNotificationScope());
+  const projectCounts = notificationTracker.counts(projectNotificationScope());
+  const updateUnread = state.updateInfo && localStorage.getItem('teambrain-notification-update-seen') !== state.updateInfo.latest ? 1 : 0;
+  const setupUnread = state.team && localStorage.getItem(setupSeenKey()) !== 'true' ? 1 : 0;
+  return {
+    general: Object.values(teamCounts).reduce((sum, count) => sum + count, 0) + updateUnread,
+    repo: Object.values(projectCounts).reduce((sum, count) => sum + count, 0) + setupUnread
+  };
+}
+function notificationEmpty(text) { return `<div class="notification-empty">${escape(text)}</div>`; }
+function generalNotificationMarkup() {
+  const items = [];
+  if (state.updateInfo) items.push(`<a class="notification-item important" href="${escape(state.updateInfo.url)}" target="_blank" rel="noreferrer"><strong>TeamBrain güncellemesi hazır</strong><span>${escape(state.updateInfo.name || state.updateInfo.latest)} sürüm notlarını aç.</span><small>GENEL · SÜRÜM</small></a>`);
+  const counts = notificationTracker.counts(teamNotificationScope());
+  if (counts.team) items.push(`<button class="notification-item" type="button" data-notification-view="team"><strong>Ekip bilgileri güncellendi</strong><span>${counts.team} yeni ekip veya üye değişikliği var.</span><small>GENEL · EKİP</small></button>`);
+  for (const message of state.teamChat.filter(item => item.event_type === 'chat.message').slice(-8).reverse()) {
+    items.push(`<button class="notification-item" type="button" data-notification-view="chat" data-notification-chat-scope="team"><strong>${escape(message.actor_id || 'Ekip üyesi')}</strong><span>${escape(String(message.body || '').slice(0, 150))}</span><small>GENEL · EKİP SOHBETİ · ${date(message.created_at)}</small></button>`);
+  }
+  return items.join('') || notificationEmpty('Henüz genel bildirim yok.');
+}
+function repoNotificationMarkup() {
+  const items = [], currentTeam = team(), repo = currentTeam?.github_repo;
+  if (currentTeam) items.push(`<button class="notification-item important" type="button" data-notification-setup="${escape(currentTeam.id)}"><strong>TeamBrain kurulumunu tamamla</strong><span>${repo?.full ? `${escape(repo.full)} reposunu AI ajanı veya terminal sihirbazıyla bağla.` : 'Kurulum sihirbazını ve AI ajanı mesajını yeniden aç.'}</span><small>BU REPO · ÖNEMLİ</small></button>`);
+  const activity = [
+    ...events().filter(item => item.event_type !== 'chat.reply.generated').map(item => ({ kind: 'event', id: item.event_id, title: item.title, text: names[item.event_type] || item.event_type, at: item.created_at })),
+    ...(state.snapshot?.planner?.tasks || []).map(item => ({ kind: 'tasks', title: item.title, text: `Görev · ${item.assignee}`, at: item.created_at })),
+    ...(state.snapshot?.planner?.calendar || []).map(item => ({ kind: 'calendar', title: item.title, text: `Etkinlik · ${item.date}${item.time ? ` ${item.time}` : ''}`, at: item.created_at || `${item.date}T00:00:00` }))
+  ].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 10);
+  for (const item of activity) items.push(`<button class="notification-item" type="button" ${item.kind === 'event' ? `data-notification-event="${escape(item.id)}"` : `data-notification-view="${item.kind}"`}><strong>${escape(item.title)}</strong><span>${escape(item.text)}</span><small>BU REPO · ${date(item.at)}</small></button>`);
+  return items.join('') || notificationEmpty('Bu repo için henüz bildirim yok.');
+}
+function renderNotificationCenter() {
+  const panel = $('notifications-panel');
+  if (!panel) return;
+  const counts = notificationSectionCounts(), total = counts.general + counts.repo;
+  $('notifications-badge').hidden = total === 0;
+  $('notifications-badge').textContent = total > 99 ? '99+' : String(total);
+  $('general-notification-count').textContent = counts.general ? String(counts.general) : '';
+  $('repo-notification-count').textContent = counts.repo ? String(counts.repo) : '';
+  document.querySelectorAll('[data-notification-section]').forEach(button => button.setAttribute('aria-selected', String(button.dataset.notificationSection === state.notificationSection)));
+  $('notifications-list').innerHTML = state.notificationSection === 'general' ? generalNotificationMarkup() : repoNotificationMarkup();
+}
+function markNotificationSectionSeen(section) {
+  if (section === 'general') {
+    notificationTracker.markSeen(teamNotificationScope(), 'team');
+    notificationTracker.markSeen(teamNotificationScope(), 'chat');
+    if (state.updateInfo) localStorage.setItem('teambrain-notification-update-seen', state.updateInfo.latest);
+  } else {
+    for (const category of ['chat', 'activity', 'decisions', 'calendar', 'tasks']) notificationTracker.markSeen(projectNotificationScope(), category);
+    if (state.team) localStorage.setItem(setupSeenKey(), 'true');
+  }
+  renderNotificationLights();
+  renderNotificationCenter();
+}
 function observeNotifications(markCurrent = false) {
   const { teamItems, projectItems } = notificationItems();
   notificationTracker.observe(teamNotificationScope(), teamItems, ownActors());
   notificationTracker.observe(projectNotificationScope(), projectItems, ownActors());
   if (markCurrent) markViewSeen();
   renderNotificationLights();
+  renderNotificationCenter();
 }
 
 function choose() {
@@ -117,16 +217,18 @@ function choose() {
 async function showSetupGuide(teamId) {
   try {
     const guide = await api(`/api/teams/${teamId}`, undefined, 'GET');
-    $('setup-content').innerHTML = `<p>Site ekip kaydını oluşturdu. Kod reposuna otomatik erişemediği için aşağıdaki adımları bir kez uygulayın.</p><ol>${guide.steps.map(step => `<li>${escape(step)}</li>`).join('')}</ol><label for="setup-command">CMD / PowerShell komutu</label><textarea id="setup-command" rows="4" readonly>${escape(guide.command)}</textarea><button class="secondary" id="copy-setup" type="button">Komutu kopyala</button><p class="detail-meta">Kod reposu yolundaki <code>C:\\path\\to\\code</code> bölümünü kendi klasörünüzle değiştirin.</p>`;
+    localStorage.setItem(setupSeenKey(teamId), 'true');
+    $('setup-content').innerHTML = `<p>Site ekip kaydını oluşturdu. Kod reposuna otomatik erişemediği için kurulumu aşağıdaki yöntemlerden biriyle tamamlayın.</p><section class="recommended-setup"><span class="badge">ÖNERİLEN</span><h3>AI ajanı kurulumu yapsın</h3><p>Bu mesajı Codex veya kullandığınız AI ajanına gönderin. Ajan doğru yerel repo yolunu doğrular, son seçimleri size gösterir ve TeamBrain kurulum sihirbazını çalıştırır.</p><label for="agent-setup-prompt">AI ajanına gönderilecek mesaj</label><textarea id="agent-setup-prompt" rows="7" readonly>${escape(guide.agent_prompt)}</textarea><button class="primary" id="copy-agent-setup" type="button">AI mesajını kopyala</button></section><div class="setup-divider"><span>veya elle kur</span></div><ol>${guide.steps.map(step => `<li>${escape(step)}</li>`).join('')}</ol><label for="setup-command">CMD / PowerShell komutu</label><textarea id="setup-command" rows="4" readonly>${escape(guide.command)}</textarea><button class="secondary" id="copy-setup" type="button">Komutu kopyala</button><p class="detail-meta">Kod reposu yolundaki <code>C:\\path\\to\\code</code> bölümünü kendi klasörünüzle değiştirin.</p>`;
     $('setup-guide').showModal();
     $('copy-setup').onclick = async () => { await navigator.clipboard.writeText(guide.command); toast('Kurulum komutu panoya kopyalandı.'); };
+    $('copy-agent-setup').onclick = async () => { await navigator.clipboard.writeText(guide.agent_prompt); toast('AI ajanı kurulum mesajı panoya kopyalandı.'); };
+    renderNotificationCenter();
   } catch (error) { toast(error.message); }
 }
 async function reloadTeams() {
   if (!state.actors.length) state.actors = (await api('/api/identity')).aliases || [];
   state.teams = await api('/api/teams');
-  if (!team()) state.team = state.teams[0]?.id || null;
-  if (!team()?.projects.some(p => p.id === state.project)) state.project = team()?.projects[0]?.id || null;
+  restoreSelection();
   choose();
   await loadTeamChat();
   await loadProject();
@@ -177,6 +279,7 @@ function renderList() {
   if (target) target.innerHTML = filtered().map(record).join('') || empty('Burada henüz bir kayıt yok.', 'Aramanı değiştirebilir veya yeni bir kayıt ekleyebilirsin.');
 }
 function renderShell(data, decisions) {
+  document.body.classList.toggle('calendar-active', state.view === 'calendar');
   $('breadcrumb').textContent = `${team()?.name || 'Çalışma alanı'}${data ? ' / ' + data.project.name : ''}`;
   $('heading').textContent = state.view === 'overview' ? data?.project.name || 'Ekibinin ortak hafızası.' : views[state.view];
   $('subtitle').textContent = state.view === 'chat' ? 'Projenin hafızasıyla konuş; her mesaj aynı zamanda kayıt olur.' : state.view === 'overview' ? 'Kararlar, çalışmalar ve onları birbirine bağlayan nedenler.' : 'Seçili projenin bilgisi. İhtiyacın olan bağlam, bir arada.';
@@ -190,13 +293,14 @@ function renderShell(data, decisions) {
   $('metrics').innerHTML = [[data?.total || 0, 'Toplam kayıt', 'Projenin kalıcı hafızası', '≋'], [decisions.length, 'Karar kaydı', 'Gerekçesiyle birlikte', '◇'], [events().filter(e => e.event_type === 'issue.detected').length, 'Sorun kaydı', 'Açık/kapalı takibi henüz yok', '◌'], [new Set(events().map(e => e.actor_id)).size, 'Katkı veren', 'Kayıtlardaki farklı kişiler', '↗']].map(([n, label, hint, icon]) => `<div class="metric"><div class="metric-top"><span>${label}</span><span>${icon}</span></div><strong>${n}</strong><small>${hint}</small></div>`).join('');
   document.querySelectorAll('[data-view]').forEach(b => { b.classList.toggle('active', b.dataset.view === state.view); b.setAttribute('aria-current', b.dataset.view === state.view ? 'page' : 'false'); });
   renderNotificationLights();
+  renderNotificationCenter();
 }
-function plannerEditor(mode) {
+function plannerEditor(mode, selectedDate = '') {
   state.mode = mode; $('form-error').textContent = '';
   $('editor-title').textContent = mode === 'calendar' ? 'Takvime etkinlik ekle' : 'Yeni görev oluştur';
   const members = state.snapshot?.members || [];
   const assignee = members.length ? `<select name="assignee" required><option value="">Ekip üyesi seç</option>${members.map(member => `<option value="${escape(member.login)}">${escape(member.name || member.login)} (@${escape(member.login)})</option>`).join('')}</select>` : `<input name="assignee" maxlength="200" required placeholder="Örn. Emre"><small class="detail-meta">GitHub üyeleri henüz okunamadı; kullanıcı kimliğini elle yazabilirsin.</small>`;
-  $('fields').innerHTML = mode === 'calendar' ? `<label>Etkinlik adı</label><input name="title" maxlength="200" required placeholder="Örn. Sprint planlama"><label>Tarih</label><input name="date" type="date" required><label>Saat</label><input name="time" type="time"><label>Konum veya bağlantı</label><input name="location" maxlength="200" placeholder="Örn. Toplantı odası / bağlantı"><label>Not</label><textarea name="notes" maxlength="2000" placeholder="Ekip için kısa not"></textarea>` : `<label>Görev</label><input name="title" maxlength="200" required placeholder="Örn. Test senaryolarını hazırla"><label>Sorumlu ekip üyesi</label>${assignee}<label>Son tarih</label><input name="due_date" type="date"><label>Açıklama</label><textarea name="description" maxlength="2000" placeholder="Beklenen çıktı"></textarea>`;
+  $('fields').innerHTML = mode === 'calendar' ? `<label>Etkinlik adı</label><input name="title" maxlength="200" required placeholder="Örn. Sprint planlama"><label>Tarih</label><input name="date" type="date" required value="${escape(selectedDate)}"><label>Saat</label><input name="time" type="time"><label>Konum veya bağlantı</label><input name="location" maxlength="200" placeholder="Örn. Toplantı odası / bağlantı"><label>Not</label><textarea name="notes" maxlength="2000" placeholder="Ekip için kısa not"></textarea>` : `<label>Görev</label><input name="title" maxlength="200" required placeholder="Örn. Test senaryolarını hazırla"><label>Sorumlu ekip üyesi</label>${assignee}<label>Son tarih</label><input name="due_date" type="date"><label>Açıklama</label><textarea name="description" maxlength="2000" placeholder="Beklenen çıktı"></textarea>`;
   $('editor').showModal(); $('fields').querySelector('input')?.focus();
 }
 function renderCalendar() {
@@ -208,9 +312,9 @@ function renderCalendar() {
     const dayNumber = index - offset + 1, dateObj = new Date(year, month, dayNumber), current = dayNumber > 0 && dayNumber <= days;
     const key = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
     const dayItems = byDate[key] || [], todayKey = new Date().toISOString().slice(0, 10);
-    return `<div class="month-cell ${current ? '' : 'outside'} ${key === todayKey ? 'today' : ''} ${dayItems.length ? 'has-events' : ''}"><span class="cell-number">${dateObj.getDate()}</span>${dayItems.slice(0, 3).map((item, itemIndex) => `<div class="calendar-chip chip-${itemIndex % 4}" title="${escape(item.title)}">${item.time ? `<small>${escape(item.time)}</small>` : ''}${escape(item.title)}</div>`).join('')}${dayItems.length > 3 ? `<span class="more-events">+${dayItems.length - 3} etkinlik</span>` : ''}</div>`;
+    return `<button type="button" class="month-cell ${current ? '' : 'outside'} ${key === todayKey ? 'today' : ''} ${key === state.selectedCalendarDate ? 'selected' : ''} ${dayItems.length ? 'has-events' : ''}" data-calendar-date="${key}" aria-label="${escape(dateObj.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' }))}; ${dayItems.length} etkinlik"><span class="cell-number">${dateObj.getDate()}</span>${dayItems.slice(0, 3).map((item, itemIndex) => `<span class="calendar-chip chip-${itemIndex % 4}" title="${escape(item.title)}">${item.time ? `<small>${escape(item.time)}</small>` : ''}${escape(item.title)}</span>`).join('')}${dayItems.length > 3 ? `<span class="more-events">+${dayItems.length - 3} etkinlik</span>` : ''}</button>`;
   }).join('');
-  $('content').innerHTML = `<div class="calendar-heading"><div><span class="eyebrow">EKİP PLANI</span><h2>${escape(monthName.charAt(0).toLocaleUpperCase('tr-TR') + monthName.slice(1))}</h2><p>${items.length ? `${items.length} etkinlik planlandı` : 'Etkinlikleri günlere ekleyerek ekibin ritmini görünür kıl.'}</p></div><div class="calendar-actions"><button class="secondary" data-calendar-nav="prev" aria-label="Önceki ay">‹</button><button class="secondary today-button" data-calendar-nav="today">Bugün</button><button class="secondary" data-calendar-nav="next" aria-label="Sonraki ay">›</button><button class="primary" data-action="calendar">＋ Etkinlik ekle</button></div></div><section class="calendar-panel"><div class="weekdays">${['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'].map(day => `<span>${day}</span>`).join('')}</div><div class="month-grid">${cells}</div></section><div class="calendar-legend"><span><i class="legend-dot chip-0"></i>Toplantı</span><span><i class="legend-dot chip-1"></i>Teslim</span><span><i class="legend-dot chip-2"></i>Çalışma</span><span><i class="legend-dot chip-3"></i>Diğer</span></div>`;
+  $('content').innerHTML = `<div class="calendar-heading"><div><span class="eyebrow">EKİP PLANI</span><h2>${escape(monthName.charAt(0).toLocaleUpperCase('tr-TR') + monthName.slice(1))}</h2><p>${state.selectedCalendarDate ? `${escape(new Date(`${state.selectedCalendarDate}T12:00:00`).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' }))} seçildi · Etkinlik eklemek için çift tıkla` : items.length ? `${items.length} etkinlik planlandı · Bir güne çift tıklayarak etkinlik ekle` : 'Bir güne çift tıklayarak ilk etkinliği ekle.'}</p></div><div class="calendar-actions"><button class="secondary" data-calendar-nav="prev" aria-label="Önceki ay">‹</button><button class="secondary today-button" data-calendar-nav="today">Bugün</button><button class="secondary" data-calendar-nav="next" aria-label="Sonraki ay">›</button><button class="primary" data-action="calendar">＋ Etkinlik ekle</button></div></div><section class="calendar-panel"><div class="weekdays">${['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'].map(day => `<span>${day}</span>`).join('')}</div><div class="month-grid">${cells}</div></section><div class="calendar-legend"><span><i class="legend-dot chip-0"></i>Toplantı</span><span><i class="legend-dot chip-1"></i>Teslim</span><span><i class="legend-dot chip-2"></i>Çalışma</span><span><i class="legend-dot chip-3"></i>Diğer</span></div>`;
 }function renderTasks() {
   const tasks = state.snapshot.planner?.tasks || [], done = tasks.filter(t => t.status === 'done').length;
   $('content').innerHTML = `<div class="planner-toolbar"><div><h2>Ekip görevleri</h2><p>${done}/${tasks.length} görev tamamlandı. Sorumlu kişi bitirdiğinde kutuyu işaretleyin.</p></div><button class="primary" data-action="task">＋ Görev ata</button></div><section class="panel planner-list">${tasks.map(task => `<article class="task-item ${task.status === 'done' ? 'done' : ''}"><button class="task-check" data-task="${escape(task.id)}" aria-label="${task.status === 'done' ? 'Tamamlandı olarak işaretini kaldır' : 'Görevi tamamlandı işaretle'}">${task.status === 'done' ? '✓' : ''}</button><div><h3>${escape(task.title)}</h3><p>Sorumlu: <strong>${escape(task.assignee)}</strong>${task.due_date ? ` · Son tarih: ${escape(task.due_date)}` : ''}</p>${task.description ? `<small>${escape(task.description)}</small>` : ''}${task.completed_by ? `<small class="task-completed">Tamamlayan: ${escape(task.completed_by)}</small>` : ''}</div></article>`).join('') || empty('Henüz görev yok.', 'Ekip üyelerine görev atayarak başlayın.', {id:'task',text:'＋ İlk görevi ata'})}</section>`;
@@ -221,8 +325,18 @@ function render() {
   renderShell(data, decisions);
   if (state.view === 'team') { renderTeam(); return; }
   if (state.view === 'chat' && !state.project) { renderChat(); return; }
+  if (state.view === 'integrations') { renderConnections(); return; }
   if (!state.project) {
-    $('content').innerHTML = `<section class="panel">${empty(state.team ? 'Bu ekibin ilk projesini ekle.' : 'Ortak beyni bağla ve ekibini başlat.', state.team ? 'Her projenin kayıtları ayrı tutulur.' : 'Önce Bağlantılar sekmesinde GitHub memory repo durumunu kontrol et. Sonra ekip ve proje oluştur. Üyeler aynı memory repo’yu kendi actor kimlikleriyle kullanır.', { id: state.team ? 'project' : 'team', text: state.team ? '＋ Proje oluştur' : '＋ Ekip oluştur' })}</section>`;
+    const labels = {
+      overview: ['Bu ekibin ilk projesini ekle.', 'Genel bakış, proje kayıtları oluşturulduğunda burada görünür.'],
+      activity: ['Aktivite için bir proje gerekli.', 'Kayıtlar ve değişiklikler proje bazında tutulur.'],
+      decisions: ['Karar defteri için bir proje gerekli.', 'Kararlar, ait oldukları projenin gerekçeleriyle birlikte saklanır.'],
+      calendar: ['Takvim için bir proje gerekli.', 'Etkinlikler seçili projenin planına eklenir.'],
+      tasks: ['Görevler için bir proje gerekli.', 'Görevler seçili projenin ekip üyelerine atanır.'],
+      daily: ['Günün özeti için bir proje gerekli.', 'Günlük özet, seçili projenin bugünkü kayıtlarından oluşturulur.']
+    };
+    const [title, text] = state.team ? (labels[state.view] || labels.overview) : ['Ortak beyni bağla ve ekibini başlat.', 'Önce Bağlantılar bölümünü kontrol et, ardından ekip ve proje oluştur.'];
+    $('content').innerHTML = `<section class="panel">${empty(title, text, { id: state.team ? 'project' : 'team', text: state.team ? '＋ Proje oluştur' : '＋ Ekip oluştur' })}</section>`;
     return;
   }
   if (!data) { $('content').innerHTML = '<div class="panel empty" role="status">Proje yükleniyor…</div>'; return; }
@@ -270,7 +384,7 @@ async function submitChat(event) {
   const form = event.currentTarget;
   const message = new FormData(form).get('message');
   if (!String(message || '').trim()) return;
-  $('send-chat').disabled = true;
+  setButtonBusy($('send-chat'), true, 'Gönderiliyor');
   try {
     if (state.chatScope === 'team') { await api(`/api/teams/${state.team}/chat`, { message, actor: state.snapshot?.actor }); await loadTeamChat(); render(); }
     else await api(base() + '/chat', { message });
@@ -279,7 +393,7 @@ async function submitChat(event) {
   } catch (error) {
     toast(error.message);
   } finally {
-    $('send-chat')?.removeAttribute('disabled');
+    setButtonBusy($('send-chat'), false);
   }
 }
 function renderActivity() {
@@ -318,11 +432,19 @@ async function detail(eventId) {
     $('chain').textContent = error.message;
   }
 }
-$('team').addEventListener('change', async e => { state.team = e.target.value; state.project = team()?.projects[0]?.id || null; state.query = ''; choose(); await loadTeamChat(); await loadProject(); });
-$('projects').addEventListener('click', async e => { const b = e.target.closest('[data-project]'); if (b) { state.project = b.dataset.project; state.query = ''; state.type = ''; choose(); await loadProject(); } });
+$('team').addEventListener('change', async e => { state.team = e.target.value; state.project = team()?.projects[0]?.id || null; state.query = ''; rememberSelection(); choose(); await loadTeamChat(); await loadProject(); });
+$('projects').addEventListener('click', async e => { const b = e.target.closest('[data-project]'); if (b) { state.project = b.dataset.project; state.query = ''; state.type = ''; rememberSelection(); choose(); await loadProject(); } });
 $('nav').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) { state.view = b.dataset.view; state.query = ''; state.type = ''; markViewSeen(); render(); } });
 $('content').addEventListener('click', async e => {  const calendarNav = e.target.closest('[data-calendar-nav]')?.dataset.calendarNav;
   if (calendarNav) { const cursor = state.calendarCursor || new Date(); if (calendarNav === 'today') state.calendarCursor = new Date(); else state.calendarCursor = new Date(cursor.getFullYear(), cursor.getMonth() + (calendarNav === 'next' ? 1 : -1), 1); render(); return; }
+  const calendarDay = e.target.closest('[data-calendar-date]');
+  if (calendarDay) {
+    state.selectedCalendarDate = calendarDay.dataset.calendarDate;
+    document.querySelectorAll('[data-calendar-date]').forEach(day => day.classList.toggle('selected', day === calendarDay));
+    const hint = document.querySelector('.calendar-heading p');
+    if (hint) hint.textContent = `${new Date(`${state.selectedCalendarDate}T12:00:00`).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })} seçildi · Etkinlik eklemek için çift tıkla`;
+    return;
+  }
   const event = e.target.closest('[data-event]');
   if (event) { await detail(event.dataset.event); return; }
   const action = e.target.closest('[data-action]')?.dataset.action;
@@ -330,10 +452,17 @@ $('content').addEventListener('click', async e => {  const calendarNav = e.targe
   if (action === 'calendar' || action === 'task') plannerEditor(action);
   if (action === 'activity') { state.view = 'activity'; markViewSeen(); render(); }
   if (action === 'refresh') await loadProject();
-  if (action === 'refresh-members') { try { const result = await api(`/api/teams/${state.team}/members`, {}, 'POST'); toast(`${result.members.length} GitHub üyesi güncellendi.`); await reloadTeams(); } catch (error) { toast(error.message); } }
+  if (action === 'refresh-members') { const button = e.target.closest('[data-action]'); setButtonBusy(button, true, 'Yenileniyor'); try { const result = await api(`/api/teams/${state.team}/members`, {}, 'POST'); toast(`${result.members.length} GitHub üyesi güncellendi.`); await reloadTeams(); } catch (error) { toast(error.message); } finally { setButtonBusy(button, false); } }
   const taskButton = e.target.closest('[data-task]');
-  if (taskButton) { try { await api(base() + '/tasks/' + encodeURIComponent(taskButton.dataset.task), { status: taskButton.closest('.task-item').classList.contains('done') ? 'open' : 'done' }, 'PATCH'); await loadProject(); } catch (error) { toast(error.message); } return; }
-  if (action === 'reindex') { try { const result = await api(base() + '/reindex', {}); toast(`${result.indexed} kayıt indekslendi.`); await loadProject(); } catch (error) { toast(error.message); } }
+  if (taskButton) { setButtonBusy(taskButton, true, ''); try { await api(base() + '/tasks/' + encodeURIComponent(taskButton.dataset.task), { status: taskButton.closest('.task-item').classList.contains('done') ? 'open' : 'done' }, 'PATCH'); await loadProject(); } catch (error) { toast(error.message); setButtonBusy(taskButton, false); } return; }
+  if (action === 'reindex') { const button = e.target.closest('[data-action]'); setButtonBusy(button, true, 'Yenileniyor'); try { const result = await api(base() + '/reindex', {}); toast(`${result.indexed} kayıt indekslendi.`); await loadProject(); } catch (error) { toast(error.message); } finally { setButtonBusy(button, false); } }
+});
+$('content').addEventListener('dblclick', e => {
+  const calendarDay = e.target.closest('[data-calendar-date]');
+  if (!calendarDay) return;
+  e.preventDefault();
+  state.selectedCalendarDate = calendarDay.dataset.calendarDate;
+  plannerEditor('calendar', state.selectedCalendarDate);
 });
 $('add-team').onclick = () => editor('team');
 $('remove-team').onclick = async () => {
@@ -345,16 +474,46 @@ $('remove-team').onclick = async () => {
   try { await api(`/api/teams/${current.id}`, { confirmation }, 'DELETE'); state.team = null; state.project = null; state.snapshot = null; toast('Ekip silindi.'); await reloadTeams(); } catch (error) { toast(error.message); }
 };
 $('close-setup').onclick = () => $('setup-guide').close();
+$('notifications-toggle').onclick = event => {
+  event.stopPropagation();
+  const panel = $('notifications-panel'), open = panel.hidden;
+  panel.hidden = !open;
+  $('notifications-toggle').setAttribute('aria-expanded', String(open));
+  if (open) { renderNotificationCenter(); markNotificationSectionSeen(state.notificationSection); }
+};
+$('close-notifications').onclick = () => { $('notifications-panel').hidden = true; $('notifications-toggle').setAttribute('aria-expanded', 'false'); };
+document.querySelectorAll('[data-notification-section]').forEach(button => button.onclick = event => {
+  event.stopPropagation();
+  state.notificationSection = button.dataset.notificationSection;
+  markNotificationSectionSeen(state.notificationSection);
+});
+$('notifications-list').addEventListener('click', async event => {
+  const setup = event.target.closest('[data-notification-setup]');
+  if (setup) { $('close-notifications').click(); await showSetupGuide(setup.dataset.notificationSetup); return; }
+  const eventButton = event.target.closest('[data-notification-event]');
+  if (eventButton) { $('close-notifications').click(); await detail(eventButton.dataset.notificationEvent); return; }
+  const viewButton = event.target.closest('[data-notification-view]');
+  if (viewButton) {
+    if (viewButton.dataset.notificationChatScope) state.chatScope = viewButton.dataset.notificationChatScope;
+    state.view = viewButton.dataset.notificationView;
+    markViewSeen();
+    $('close-notifications').click();
+    render();
+  }
+});
+document.addEventListener('click', event => {
+  if (!$('notifications-panel').hidden && !event.target.closest('.notification-center')) $('close-notifications').click();
+});
 $('upload-document').onclick = () => $('document-file').click();
 $('document-file').addEventListener('change', async event => {
   const file = event.target.files?.[0]; if (!file || !state.team || !state.project) return;
   const form = new FormData(); form.append('file', file);
-  $('upload-document').disabled = true;
+  setButtonBusy($('upload-document'), true, 'Yükleniyor');
   try {
     const response = await fetch(`/api/teams/${state.team}/projects/${state.project}/documents`, { method: 'POST', body: form });
     const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Belge yüklenemedi.');
     toast(`Belge Markdown olarak kaydedildi: ${result.filename}`); await loadProject();
-  } catch (error) { toast(error.message); } finally { event.target.value = ''; $('upload-document')?.removeAttribute('disabled'); }
+  } catch (error) { toast(error.message); } finally { event.target.value = ''; setButtonBusy($('upload-document'), false); }
 });
 $('add-project').onclick = () => editor('project');
 $('new-event').onclick = () => editor('event');
@@ -363,7 +522,7 @@ $('close-editor').onclick = $('cancel').onclick = () => $('editor').close();
 $('close-detail').onclick = () => $('detail').close();
 $('editor-form').addEventListener('submit', async e => {
   e.preventDefault();
-  $('save').disabled = true;
+  setButtonBusy($('save'), true, state.mode === 'task' ? 'Atanıyor' : 'Kaydediliyor');
   $('form-error').textContent = '';
   const input = Object.fromEntries(new FormData(e.target));
   try {
@@ -379,10 +538,11 @@ $('editor-form').addEventListener('submit', async e => {
   } catch (error) {
     $('form-error').textContent = error.message;
   } finally {
-    $('save').disabled = false;
+    setButtonBusy($('save'), false);
   }
 });
 document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$('notifications-panel').hidden) { $('close-notifications').click(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); state.view = 'activity'; markViewSeen(); render(); $('search')?.focus(); }
 });
 

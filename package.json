@@ -5,10 +5,10 @@
   "type": "commonjs",
   "bin": { "teambrain": "bin/teambrain.js" },
   "scripts": {
-    "test": "node --experimental-sqlite --test test/**/*.test.js",
-    "start": "node --experimental-sqlite bin/teambrain.js dashboard --root ./data",
+    "test": "node test/run-all.js",
+    "start": "node --experimental-sqlite bin/teambrain.js dashboard --root ./data --open",
     "cli": "node --experimental-sqlite bin/teambrain.js"
   },
-  "engines": { "node": ">=22.5.0" },
+  "engines": { "node": ">=22.18.0" },
   "license": "Apache-2.0"
 }

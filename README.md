@@ -114,7 +114,7 @@ cd C:\TeamBrain
 npm start
 ```
 
-Open **http://127.0.0.1:7340**. Keep the terminal running. The older demo on port 7331 is a different process.
+The launcher verifies Node.js, starts the server, and opens **http://127.0.0.1:7340** only after the dashboard is listening. Keep the terminal running. The older demo on port 7331 is a different process.
 
 ### What starts automatically
 
@@ -146,10 +146,9 @@ Automatic synchronization is opt-in in `.teambrain/connection.json`. When
 Dashboard writes trigger an immediate sync attempt; the worker also retries every
 30 seconds. Authentication errors, conflicts, or another Git attention state are
 not resolved automatically. The worker records `attention-required` and leaves the
-repository for a human to inspect. The current `sync-state.json` file is a failure
-marker, not a live health source: a later successful sync does not currently remove
-an older marker. Confirm health with `git status`, the remote branch, and a fresh
-dashboard operation.
+repository for a human to inspect. A later successful synchronization removes the
+old `sync-state.json` failure marker. Confirm health with `git status`, the remote
+branch, and a fresh dashboard operation.
 
 The synchronized `teams/` scope includes the complete content entered into
 TeamBrain's own team/project chat, notes/events, task and calendar data, project
@@ -335,7 +334,7 @@ The `actor` value is the stable member identity in receipts and handoffs; never 
 
 The dashboard can create a team directly from `＋ Ekip oluştur`. Enter the team's exact GitHub repository URL; TeamBrain verifies that the repository is reachable, derives the team name when it is left blank, prevents the same repository from being linked twice, and stores the link in the team's metadata. All projects and chat messages created under that team remain isolated under that GitHub-backed team workspace. The repository must already exist and the current user must have Git access; TeamBrain does not silently create repositories or bypass GitHub permissions.
 
-Use `＋ Belge yükle` inside a selected project to import TXT, Markdown, CSV/TSV, JSON, DOCX, XLSX/XLSM or PDF files. TeamBrain extracts their readable text and saves a traceable Markdown copy under `memory/knowledge/imports/`; the original binary is not committed by default, which keeps the GitHub memory repository reviewable and small. Imports are included in the selected memory repository's automatic sync. Do not upload secrets or personal data without reviewing the extracted text first. Files are limited to 15 MB; `.xls` is not supported yet.
+Use `＋ Belge yükle` inside a selected project to import TXT, Markdown, CSV/TSV, JSON, DOCX, XLSX/XLSM or PDF files. TXT, Markdown, CSV/TSV, JSON and log files are decoded directly by Node.js and need no additional runtime. Office documents require Python 3; PDF extraction additionally requires `pypdf` or `pdftotext`. TeamBrain saves a traceable Markdown copy under `memory/knowledge/imports/`; the original binary is not committed by default, which keeps the GitHub memory repository reviewable and small. Imports are included in the selected memory repository's automatic sync. Do not upload secrets or personal data without reviewing the extracted text first. Files are limited to 15 MB; `.xls` is not supported yet.
 
 ### Multiple GitHub memory repositories
 

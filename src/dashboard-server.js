@@ -49,7 +49,7 @@ function createDashboardServer(root) {
       if (req.method === 'GET' && url.pathname === '/api/identity') { send(200, workspace.identity()); return; }
       if (url.pathname === '/api/teams') {
         if (req.method === 'GET') { send(200, workspace.teams()); return; }
-        if (req.method === 'POST') { const input = await jsonBody(req); send(201, await withSync(workspace.createTeam(input.name, input.github_url))); return; }
+        if (req.method === 'POST') { const input = await jsonBody(req); send(201, await withSync(workspace.createTeam(input.name, input.github_url, { local_only: input.local_only === 'true' || input.local_only === true }))); return; }
       }
       const parts = url.pathname.split('/').filter(Boolean);
       if (parts[0] === 'api' && parts[1] === 'teams' && parts.length === 3) {

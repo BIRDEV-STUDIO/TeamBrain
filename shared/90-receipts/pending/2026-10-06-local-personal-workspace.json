@@ -1,0 +1,15 @@
+{
+  "title": "Yerel kişisel çalışma alanı",
+  "status": "pending-human-review",
+  "created_at": "2026-10-06T00:20:00+03:00",
+  "summary": "Dashboard artık GitHub adresi olmadan kişisel bir TeamBrain alanı oluşturur; proje klasörleri otomatik hazırlanır ve alan dashboard içinde açıkça yerel olarak gösterilir.",
+  "privacy_reviewed": true,
+  "sources": [
+    "public/app.js",
+    "src/workspace.js",
+    "src/sync-worker.js",
+    "test/workspace.test.js",
+    "test/sync-worker.test.js"
+  ],
+  "safety": "Yerel alanlar local_only olarak işaretlenir ve otomatik Git senkronizasyonunun stage yollarına eklenmez."
+}

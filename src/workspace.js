@@ -82,10 +82,10 @@ class Workspace {
       });
       if (legacy) projects.unshift({ id: 'legacy', name: 'Önceki kayıtlar' });
       const memberData = readMembers(base);
-      return { id: team, name: record.name, github_repo: record.github_repo || null, members: memberData.members, members_state: memberData.state || (memberData.members.length ? 'cached' : 'empty'), projects };
+      return { id: team, name: record.name, github_repo: record.github_repo || null, local_only: record.local_only === true, storage_path: path.posix.join('teams', team), members: memberData.members, members_state: memberData.state || (memberData.members.length ? 'cached' : 'empty'), projects };
     });
   }
-  createTeam(name, githubUrl) {
+  createTeam(name, githubUrl, options = {}) {
     const github_repo = githubUrl ? (() => {
       const repo = parseUrl(githubUrl);
       try { execFileSync('git', ['ls-remote', '--exit-code', githubUrl, 'HEAD'], { stdio: 'ignore', timeout: 15000 }); }
@@ -97,9 +97,10 @@ class Workspace {
     const team = 't-' + crypto.randomUUID();
     const base = this.teamPath(team);
     fs.mkdirSync(base, { recursive: true });
-    fs.writeFileSync(path.join(base, 'team.json'), JSON.stringify({ name, github_repo }, null, 2), { flag: 'wx' });
+    const local_only = !github_repo && options.local_only === true;
+    fs.writeFileSync(path.join(base, 'team.json'), JSON.stringify({ name, github_repo, local_only }, null, 2), { flag: 'wx' });
     const memberData = refreshMembers(base, github_repo);
-    return { id: team, name, github_repo, members: memberData.members, members_state: memberData.state, projects: [] };
+    return { id: team, name, github_repo, local_only, storage_path: path.posix.join('teams', team), members: memberData.members, members_state: memberData.state, projects: [] };
   }
   deleteTeam(team, options = {}) {
     const target = this.teamPath(team);
@@ -115,6 +116,18 @@ class Workspace {
   setupGuide(team) {
     const selected = this.teams().find(item => item.id === team);
     if (!selected) throw new Error('Ekip bulunamadı.');
+    if (selected.local_only) {
+      return {
+        mode: 'local', team: { id: selected.id, name: selected.name }, storage_path: selected.storage_path,
+        memory_repository: null, project: selected.projects.find(item => item.id !== 'legacy') || null,
+        steps: [
+          'Kişisel TeamBrain alanı bu bilgisayarda hazır; kayıtlar otomatik olarak yerel klasörlere yazılır.',
+          'Dashboard’dan “Proje oluştur” seçerek her kişisel proje için ayrı bir hafıza alanı açın.',
+          'Notlar, kararlar, takvim ve görevler proje klasöründe saklanır; GitHub bağlantısı olmadan çalışır.',
+          'İleride ekipçe paylaşmak isterseniz, ayrı ve açıkça onaylanmış bir memory reposu bağlayın.'
+        ]
+      };
+    }
     let memoryRemote = '';
     try { memoryRemote = JSON.parse(fs.readFileSync(path.join(this.root, '.teambrain', 'connection.json'), 'utf8')).remote || ''; } catch {}
     const project = selected.projects.find(item => item.id !== 'legacy') || { id: 'PROJECT_ID', name: 'Proje adı' };

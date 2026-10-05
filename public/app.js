@@ -166,7 +166,7 @@ function generalNotificationMarkup() {
 }
 function repoNotificationMarkup() {
   const items = [], currentTeam = team(), repo = currentTeam?.github_repo;
-  if (currentTeam) items.push(`<button class="notification-item important" type="button" data-notification-setup="${escape(currentTeam.id)}"><strong>TeamBrain kurulumunu tamamla</strong><span>${repo?.full ? `${escape(repo.full)} reposunu AI ajanı veya terminal sihirbazıyla bağla.` : 'Kurulum sihirbazını ve AI ajanı mesajını yeniden aç.'}</span><small>BU REPO · ÖNEMLİ</small></button>`);
+  if (currentTeam) items.push(`<button class="notification-item important" type="button" data-notification-setup="${escape(currentTeam.id)}"><strong>${repo ? 'TeamBrain kurulumunu tamamla' : currentTeam.local_only ? 'Kişisel alanın hazır' : 'TeamBrain kurulumunu tamamla'}</strong><span>${repo?.full ? `${escape(repo.full)} reposunu AI ajanı veya terminal sihirbazıyla bağla.` : currentTeam.local_only ? 'Kayıtların bu bilgisayarda otomatik klasörlenir; GitHub bağlantısı gerekmez.' : 'Kurulum sihirbazını ve AI ajanı mesajını yeniden aç.'}</span><small>BU EKİP · ÖNEMLİ</small></button>`);
   const activity = [
     ...events().filter(item => item.event_type !== 'chat.reply.generated').map(item => ({ kind: 'event', id: item.event_id, title: item.title, text: names[item.event_type] || item.event_type, at: item.created_at })),
     ...(state.snapshot?.planner?.tasks || []).map(item => ({ kind: 'tasks', title: item.title, text: `Görev · ${item.assignee}`, at: item.created_at })),
@@ -217,8 +217,17 @@ function choose() {
 async function showSetupGuide(teamId) {
   try {
     const guide = await api(`/api/teams/${teamId}`, undefined, 'GET');
-    const agentPrompt = TeamBrainNotifications.buildAgentSetupPrompt(guide);
     localStorage.setItem(setupSeenKey(teamId), 'true');
+    if (guide.mode === 'local') {
+      $('setup-guide-title').textContent = 'Kişisel alan hazır';
+      $('setup-content').innerHTML = `<p><strong>${escape(guide.team.name)}</strong> yalnızca bu bilgisayarda çalışan kişisel TeamBrain alanı olarak oluşturuldu. GitHub’a hiçbir kayıt gönderilmez.</p><section class="recommended-setup"><span class="badge">YEREL İKİNCİ BEYİN</span><h3>Klasörler otomatik hazırlanır</h3><p>Bu alandaki veriler <code>${escape(guide.storage_path)}</code> altında tutulur. Her proje eklendiğinde kendi kayıt, takvim, görev ve bilgi klasörleri de otomatik oluşur.</p><button class="primary" id="local-guide-create-project" type="button">İlk projeyi oluştur</button></section><ol>${guide.steps.map(step => `<li>${escape(step)}</li>`).join('')}</ol>`;
+      $('setup-guide').showModal();
+      $('local-guide-create-project').onclick = () => { $('setup-guide').close(); editor('project'); };
+      renderNotificationCenter();
+      return;
+    }
+    $('setup-guide-title').textContent = 'Bu ekip için kurulumu tamamla';
+    const agentPrompt = TeamBrainNotifications.buildAgentSetupPrompt(guide);
     $('setup-content').innerHTML = `<p>Site ekip kaydını oluşturdu. Kod reposuna otomatik erişemediği için kurulumu aşağıdaki yöntemlerden biriyle tamamlayın.</p><section class="recommended-setup"><span class="badge">ÖNERİLEN</span><h3>AI ajanı kurulumu yapsın</h3><p>Bu mesajı Codex veya kullandığınız AI ajanına gönderin. Ajan doğru yerel repo yolunu doğrular, son seçimleri size gösterir ve TeamBrain kurulum sihirbazını çalıştırır.</p><label for="agent-setup-prompt">AI ajanına gönderilecek mesaj</label><textarea id="agent-setup-prompt" rows="7" readonly>${escape(agentPrompt)}</textarea><button class="primary" id="copy-agent-setup" type="button">AI mesajını kopyala</button></section><div class="setup-divider"><span>veya elle kur</span></div><ol>${guide.steps.map(step => `<li>${escape(step)}</li>`).join('')}</ol><label for="setup-command">CMD / PowerShell komutu</label><textarea id="setup-command" rows="4" readonly>${escape(guide.command)}</textarea><button class="secondary" id="copy-setup" type="button">Komutu kopyala</button><p class="detail-meta">Kod reposu yolundaki <code>C:\\path\\to\\code</code> bölümünü kendi klasörünüzle değiştirin.</p>`;
     $('setup-guide').showModal();
     $('copy-setup').onclick = async () => { await navigator.clipboard.writeText(guide.command); toast('Kurulum komutu panoya kopyalandı.'); };
@@ -336,7 +345,7 @@ function render() {
       tasks: ['Görevler için bir proje gerekli.', 'Görevler seçili projenin ekip üyelerine atanır.'],
       daily: ['Günün özeti için bir proje gerekli.', 'Günlük özet, seçili projenin bugünkü kayıtlarından oluşturulur.']
     };
-    const [title, text] = state.team ? (labels[state.view] || labels.overview) : ['Ortak beyni bağla ve ekibini başlat.', 'Önce Bağlantılar bölümünü kontrol et, ardından ekip ve proje oluştur.'];
+    const [title, text] = state.team ? (labels[state.view] || labels.overview) : ['Kişisel veya ekip alanını başlat.', 'GitHub bağlamadan kişisel ikinci beynini oluşturabilir ya da ekip paylaşımı için repo ekleyebilirsin.'];
     $('content').innerHTML = `<section class="panel">${empty(title, text, { id: state.team ? 'project' : 'team', text: state.team ? '＋ Proje oluştur' : '＋ Ekip oluştur' })}</section>`;
     return;
   }
@@ -351,9 +360,12 @@ function render() {
   else renderConnections();
 }
 function renderTeam() {
-  const current = team() || {}, members = current.members || state.snapshot?.members || [], repo = current.github_repo;
+  const current = team() || {}, members = current.members || state.snapshot?.members || [], repo = current.github_repo, localOnly = current.local_only === true;
   const status = current.members_state === 'synced' ? 'GitHub’dan güncel' : current.members_state === 'cached' ? 'Yerel önbellek' : 'Üye listesi bekleniyor';
-  $('content').innerHTML = `<div class="connections"><section class="panel connection"><h3>GitHub ekibi</h3><span class="badge">${escape(status)}</span><p>${repo ? `Bağlı repo: <a href="${escape(repo.url)}" target="_blank" rel="noreferrer">${escape(repo.full)}</a>` : 'Bu ekip henüz bir GitHub memory reposuna bağlanmadı.'}</p><button class="secondary" data-action="refresh-members" ${repo ? '' : 'disabled'}>Üyeleri yenile</button></section><section class="panel connection"><h3>Ekip üyeleri</h3><span class="badge">${members.length} kişi</span><p>${members.length ? 'GitHub reposundaki erişimi olan kişiler aşağıda listelenir.' : 'Üyeler görünmüyorsa GitHub erişimini ve gh oturumunu kontrol edip yenile.'}</p></section></div><section class="panel member-list"><div class="panel-head"><h2>Üyeler</h2><span class="record-meta">Görev atamalarında kullanılabilir</span></div><div class="feed">${members.map(member => `<div class="record member-row"><span class="record-icon">●</span><span class="record-main"><span class="record-title">${escape(member.name || member.login)}</span><span class="record-meta">@${escape(member.login)}${member.permissions?.admin ? ' · yönetici' : ''}</span></span></div>`).join('') || empty('Henüz üye görünmüyor.', 'GitHub reposundaki üyeleri çekmek için Üyeleri yenile düğmesine bas.')}</div></section>`;
+  const storage = repo
+    ? `<section class="panel connection"><h3>GitHub ekibi</h3><span class="badge">${escape(status)}</span><p>Bağlı repo: <a href="${escape(repo.url)}" target="_blank" rel="noreferrer">${escape(repo.full)}</a></p><button class="secondary" data-action="refresh-members">Üyeleri yenile</button></section>`
+    : localOnly ? `<section class="panel connection"><h3>Kişisel TeamBrain alanı</h3><span class="badge">YALNIZCA BU BİLGİSAYAR</span><p>Kayıtlar otomatik olarak <code>${escape(current.storage_path || `teams/${current.id || ''}`)}</code> altında klasörlenir. GitHub bağlantısı gerekmez ve veri gönderilmez.</p><button class="secondary" data-action="local-setup">Klasör yapısını gör</button></section>` : `<section class="panel connection"><h3>GitHub ekibi</h3><span class="badge">BAĞLANMADI</span><p>Bu alan henüz bir GitHub memory reposuna bağlanmadı.</p></section>`;
+  $('content').innerHTML = `<div class="connections">${storage}<section class="panel connection"><h3>${repo ? 'Ekip üyeleri' : localOnly ? 'Kişisel kullanım' : 'Ekip üyeleri'}</h3><span class="badge">${repo ? `${members.length} kişi` : localOnly ? 'YEREL' : 'BEKLİYOR'}</span><p>${repo ? (members.length ? 'GitHub reposundaki erişimi olan kişiler aşağıda listelenir.' : 'Üyeler görünmüyorsa GitHub erişimini ve gh oturumunu kontrol edip yenile.') : localOnly ? 'Bir proje ekleyerek notlarını, kararlarını, görevlerini ve takvimini ayrı bir hafızada tutabilirsin.' : 'Ekip paylaşımı için GitHub memory reposunu açıkça bağlayın.'}</p></section></div><section class="panel member-list"><div class="panel-head"><h2>${repo ? 'Üyeler' : localOnly ? 'Projelerin için hazır' : 'Üyeler'}</h2><span class="record-meta">${repo ? 'Görev atamalarında kullanılabilir' : localOnly ? 'GitHub olmadan da çalışır' : 'GitHub bağlantısı gerekli'}</span></div><div class="feed">${repo ? (members.map(member => `<div class="record member-row"><span class="record-icon">●</span><span class="record-main"><span class="record-title">${escape(member.name || member.login)}</span><span class="record-meta">@${escape(member.login)}${member.permissions?.admin ? ' · yönetici' : ''}</span></span></div>`).join('') || empty('Henüz üye görünmüyor.', 'GitHub reposundaki üyeleri çekmek için Üyeleri yenile düğmesine bas.')) : localOnly ? empty('İlk kişisel projenizi ekleyin.', 'Her proje için klasörler ve yerel kayıt geçmişi otomatik hazırlanır.', { id: 'project', text: '＋ Proje oluştur' }) : empty('Henüz üye görünmüyor.', 'Ekip hafızası bağlandığında üyeler burada görünür.')}</div></section>`;
 }
 function renderOverview(decisions) {
   $('content').innerHTML = `<div class="content-grid"><section class="panel"><div class="panel-head"><h2>Son hareketler</h2><button class="text-button" data-action="activity">Tümünü gör ↗</button></div><div class="feed">${events().filter(e => !e.event_type.startsWith('chat.')).slice(0, 5).map(record).join('') || empty('İlk kaydınla hikâye başlasın.', 'Bir gelişme, fikir veya karar ekle.', { id: 'event', text: 'Yeni kayıt' })}</div></section><section class="panel"><div class="panel-head"><h2>Karar defteri</h2><span>◇</span></div>${decisions.slice(0, 3).map(e => `<button class="decision-card" data-event="${escape(e.event_id)}"><span class="badge">${escape(names[e.event_type] || 'Karar')}</span><h3>${escape(e.title)}</h3><span class="record-meta">${date(e.created_at)} · Gerekçeyi aç ↗</span></button>`).join('') || empty('Nedenini de hatırla.', 'Aldığınız kararları gerekçesiyle kaydedin.')}</section></div><div class="link-status">◉ &nbsp; Kayıtlar bu bilgisayarda saklanıyor. Sohbet dahil tüm proje hafızası yerel event olarak tutulur.</div>`;
@@ -416,7 +428,7 @@ function editor(mode) {
   state.mode = mode;
   $('form-error').textContent = '';
   $('editor-title').textContent = { team: 'Yeni bir ekip oluştur', project: 'Ekibine bir proje ekle', event: 'Birlikte hatırlanacak bir kayıt' }[mode];
-  $('fields').innerHTML = mode === 'event' ? `<label for="event-type">Kayıt türü</label><select id="event-type" name="event_type">${Object.entries(names).filter(([v]) => !v.startsWith('chat.')).slice(0, 7).map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select><label for="event-title">Başlık</label><input id="event-title" name="title" maxlength="200" required placeholder="Örn. İletişim için CAN bus seçildi"><label for="event-body">Ne oldu, neden önemli?</label><textarea id="event-body" name="body" maxlength="50000" placeholder="Gerekçeyi ve değerlendirdiğiniz alternatifleri ekleyin."></textarea><label for="cause">Hangi kayda dayanıyor?</label><select id="cause" name="causation_id"><option value="">Bağımsız kayıt</option>${events().filter(e => !e.event_type.startsWith('chat.')).map(e => `<option value="${escape(e.event_id)}">${escape(e.title)}</option>`).join('')}</select>` : mode === 'team' ? `<label for="entity-name">Ekip adı</label><input id="entity-name" name="name" maxlength="100" placeholder="Örn. BIRDEV Studio"><label for="github-url">GitHub ekip reposu</label><input id="github-url" name="github_url" type="url" required placeholder="https://github.com/organizasyon/ekip-reposu"><p class="detail-meta">Repo linki doğrulanır ve ekip ile kalıcı olarak eşleştirilir. Ekip arkadaşları aynı repo üzerinden ortak hafızaya bağlanır.</p>` : `<label for="entity-name">Proje adı</label><input id="entity-name" name="name" maxlength="100" required placeholder="Örn. Robot kontrol sistemi"><p class="detail-meta">Bu proje seçili ekibe ait olacak ve ayrı bir kayıt geçmişi tutacak.</p>`;
+  $('fields').innerHTML = mode === 'event' ? `<label for="event-type">Kayıt türü</label><select id="event-type" name="event_type">${Object.entries(names).filter(([v]) => !v.startsWith('chat.')).slice(0, 7).map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select><label for="event-title">Başlık</label><input id="event-title" name="title" maxlength="200" required placeholder="Örn. İletişim için CAN bus seçildi"><label for="event-body">Ne oldu, neden önemli?</label><textarea id="event-body" name="body" maxlength="50000" placeholder="Gerekçeyi ve değerlendirdiğiniz alternatifleri ekleyin."></textarea><label for="cause">Hangi kayda dayanıyor?</label><select id="cause" name="causation_id"><option value="">Bağımsız kayıt</option>${events().filter(e => !e.event_type.startsWith('chat.')).map(e => `<option value="${escape(e.event_id)}">${escape(e.title)}</option>`).join('')}</select>` : mode === 'team' ? `<input name="local_only" type="hidden" value="true"><label for="entity-name">Alan adı</label><input id="entity-name" name="name" maxlength="100" required placeholder="Örn. Kişisel projelerim"><p class="detail-meta">GitHub olmadan da yerel ikinci beynini oluşturabilirsin. Klasörler ve kayıtlar otomatik hazırlanır.</p><label for="github-url">GitHub ekip reposu <span class="record-meta">(isteğe bağlı)</span></label><input id="github-url" name="github_url" type="url" placeholder="https://github.com/organizasyon/ekip-reposu"><p class="detail-meta">Boş bırakırsan alan yalnızca bu bilgisayarda kalır; GitHub’a veri gönderilmez. Repo eklersen ekip paylaşımı için doğrulanır.</p>` : `<label for="entity-name">Proje adı</label><input id="entity-name" name="name" maxlength="100" required placeholder="Örn. Robot kontrol sistemi"><p class="detail-meta">Bu proje seçili ekibe ait olacak ve ayrı bir kayıt geçmişi tutacak.</p>`;
   if (mode === 'team') $('github-url').addEventListener('input', event => { try { const match = event.target.value.match(/github\.com[/:][^/]+\/([^/]+?)(?:\.git)?\/?$/i); if (match && !$('entity-name').value) $('entity-name').value = match[1].replace(/[-_]+/g, ' '); } catch {} });
   $('editor').showModal();
   $('fields').querySelector('input, textarea')?.focus();
@@ -454,6 +466,7 @@ $('content').addEventListener('click', async e => {  const calendarNav = e.targe
   if (action === 'activity') { state.view = 'activity'; markViewSeen(); render(); }
   if (action === 'refresh') await loadProject();
   if (action === 'refresh-members') { const button = e.target.closest('[data-action]'); setButtonBusy(button, true, 'Yenileniyor'); try { const result = await api(`/api/teams/${state.team}/members`, {}, 'POST'); toast(`${result.members.length} GitHub üyesi güncellendi.`); await reloadTeams(); } catch (error) { toast(error.message); } finally { setButtonBusy(button, false); } }
+  if (action === 'local-setup') await showSetupGuide(state.team);
   const taskButton = e.target.closest('[data-task]');
   if (taskButton) { setButtonBusy(taskButton, true, ''); try { await api(base() + '/tasks/' + encodeURIComponent(taskButton.dataset.task), { status: taskButton.closest('.task-item').classList.contains('done') ? 'open' : 'done' }, 'PATCH'); await loadProject(); } catch (error) { toast(error.message); setButtonBusy(taskButton, false); } return; }
   if (action === 'reindex') { const button = e.target.closest('[data-action]'); setButtonBusy(button, true, 'Yenileniyor'); try { const result = await api(base() + '/reindex', {}); toast(`${result.indexed} kayıt indekslendi.`); await loadProject(); } catch (error) { toast(error.message); } finally { setButtonBusy(button, false); } }
@@ -527,7 +540,8 @@ $('editor-form').addEventListener('submit', async e => {
   $('form-error').textContent = '';
   const input = Object.fromEntries(new FormData(e.target));
   try {
-    if (state.mode === 'team') { const result = await api('/api/teams', input); state.team = result.id; state.project = null; }
+    let createdTeam = null;
+    if (state.mode === 'team') { createdTeam = await api('/api/teams', input); state.team = createdTeam.id; state.project = null; }
     else if (state.mode === 'project') { const result = await api(`/api/teams/${state.team}/projects`, input); state.project = result.id; }
     else if (state.mode === 'calendar') await api(base() + '/calendar', input);
     else if (state.mode === 'task') await api(base() + '/tasks', input);
@@ -535,7 +549,10 @@ $('editor-form').addEventListener('submit', async e => {
     $('editor').close();
     toast('Kaydedildi.');
     await reloadTeams();
-    if (state.mode === 'team') await showSetupGuide(state.team);
+    if (state.mode === 'team') {
+      if (createdTeam?.github_repo) await showSetupGuide(state.team);
+      else { toast('Kişisel yerel alan oluşturuldu. İlk projenizi ekleyebilirsiniz.'); editor('project'); }
+    }
   } catch (error) {
     $('form-error').textContent = error.message;
   } finally {

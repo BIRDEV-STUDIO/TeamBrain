@@ -121,10 +121,20 @@ test('teams can be removed safely and setup guidance is generated', () => {
 
 test('team creation requires a reachable GitHub repository and stores its identity', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-team-github-'));
-  const w = new Workspace(root);
-  assert.throws(() => w.createTeam('Studio', 'https://example.com/studio.git'), /exact GitHub/);
-  const team = w.createTeam('Studio');
-  assert.equal(team.github_repo, null);
+  try {
+    const w = new Workspace(root);
+    assert.throws(() => w.createTeam('Studio', 'https://example.com/studio.git'), /exact GitHub/);
+    const team = w.createTeam('Studio', undefined, { local_only: true });
+    assert.equal(team.github_repo, null);
+    assert.equal(team.storage_path, `teams/${team.id}`);
+    assert.equal(fs.existsSync(path.join(root, team.storage_path, 'team.json')), true);
+    const guide = w.setupGuide(team.id);
+    assert.equal(guide.mode, 'local');
+    assert.equal(guide.storage_path, team.storage_path);
+    assert.match(guide.steps.join(' '), /GitHub bağlantısı olmadan çalışır/);
+    const project = w.createProject(team.id, 'Kişisel uygulama');
+    assert.equal(fs.existsSync(path.join(root, team.storage_path, 'projects', project.id, 'memory')), true);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
 test('cached GitHub members are exposed to the project and task planner', () => {
@@ -166,7 +176,10 @@ test('dashboard HTTP onboarding, input checks, security headers and cross-origin
     });
     assert.equal(hostStatus, 403);
     assert.equal((await post('/api/teams', { name: '  ' })).status, 400);
-    const team = await (await post('/api/teams', { name: 'Studio' })).json();
+    const team = await (await post('/api/teams', { name: 'Studio', local_only: true })).json();
+    assert.equal(team.local_only, true);
+    assert.equal(team.github_repo, null);
+    assert.match(team.storage_path, new RegExp(`^teams/${team.id}$`));
     const members = await fetch(`${base}/api/teams/${team.id}/members`);
     assert.equal(members.status, 200);
     assert.deepEqual(await members.json(), []);

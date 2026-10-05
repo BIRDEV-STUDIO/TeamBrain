@@ -132,6 +132,18 @@ dashboard automatically at sign-in. Without that explicit approval it does not a
 a service, scheduled task, or startup application. Merely opening a code repository
 or editing/saving a file does not upload anything.
 
+### Personal projects without GitHub
+
+For a personal project, open the dashboard and choose **Ekip oluştur** (the label is
+also used for a personal workspace). Enter an area name and leave **GitHub ekip
+reposu** empty. TeamBrain creates a local-only second brain under `teams/<team-id>`;
+each project added from the dashboard gets its own folders and local history
+automatically. Notes, decisions, tasks, calendar entries and chat records remain on
+that computer and are visible in the dashboard. No GitHub repository, hook or sync
+connection is required, and TeamBrain does not upload those records. You can choose
+to connect a separately reviewed private memory repository later if you want team
+sharing.
+
 ### What is sent automatically
 
 Automatic synchronization is opt-in in `.teambrain/connection.json`. When

@@ -154,7 +154,9 @@ test('dashboard HTTP onboarding, input checks, security headers and cross-origin
     assert.equal((await fetch(base + '/notifications.js')).status, 200);
     const notificationCss = await fetch(base + '/notifications.css');
     assert.equal(notificationCss.status, 200);
-    assert.match(await notificationCss.text(), /@keyframes loading-dot/);
+    const notificationCssText = await notificationCss.text();
+    assert.match(notificationCssText, /@keyframes loading-dot/);
+    assert.match(notificationCssText, /\.calendar-active\{overflow-x:hidden;overflow-y:auto/);
     const identity = await (await fetch(base + '/api/identity')).json();
     assert.ok(identity.actor);
     assert.ok(identity.aliases.includes(identity.actor));

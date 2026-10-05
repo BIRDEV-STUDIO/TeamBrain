@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="TeamBrain — ekiplerin kararlarını ve proje bağlamını ortak hafızaya dönüştürür.">
+  <meta name="theme-color" content="#071014">
+  <title>TeamBrain — Ekibinizin ortak hafızası</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23071014'/%3E%3Cpath d='M18 38c0-12 7-20 18-20 7 0 12 3 15 8' fill='none' stroke='%2378f5c5' stroke-width='6' stroke-linecap='round'/%3E%3Ccircle cx='20' cy='41' r='5' fill='%2369a9ff'/%3E%3Ccircle cx='46' cy='25' r='5' fill='%23ffcf70'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="noise"></div>
+  <header class="site-header">
+    <a class="brand" href="#top"><span class="brand-mark"><i></i><i></i><i></i></span><span>teambrain<span class="dot">.</span></span></a>
+    <nav class="nav" aria-label="Ana navigasyon"><a href="#nasil">Nasıl çalışır?</a><a href="#neden">Neden TeamBrain?</a><a href="#kurulum">Kurulum</a><a class="nav-cta" href="https://github.com/BIRDEV-STUDIO/TeamBrain" target="_blank" rel="noreferrer">GitHub reposu</a></nav>
+    <button class="menu-toggle" aria-label="Menüyü aç" aria-expanded="false">☰</button>
+  </header>
+  <main id="top">
+    <section class="hero section-wrap">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="pulse"></span> OPEN SOURCE · LOCAL-FIRST · GIT-BACKED</div>
+        <h1>İyi fikirler<br><em>kaybolmasın.</em></h1>
+        <p class="hero-lede">TeamBrain, ekiplerin kararlarını, proje bağlamını ve öğrenimlerini herkesin erişebildiği ortak bir hafızaya dönüştürür.</p>
+        <div class="hero-actions"><a class="button primary" href="#kurulum">Kurulumu gör</a><a class="button quiet" href="https://github.com/BIRDEV-STUDIO/TeamBrain" target="_blank" rel="noreferrer">GitHub’da incele <span class="external">↗</span></a></div>
+        <div class="trust-row"><span>Node.js 22+</span><i></i><span>Markdown kayıtları</span><i></i><span>GitHub senkronu</span></div>
+      </div>
+      <div class="hero-visual" aria-label="TeamBrain ortak hafıza akışı">
+        <div class="orbital-grid"></div><div class="orbit orbit-a"></div><div class="orbit orbit-b"></div><div class="orbit orbit-c"></div>
+        <div class="brain-core"><span class="core-icon">✳</span><strong>teambrain</strong><small>shared context</small></div>
+        <div class="float-card card-decision"><span class="card-icon green">◇</span><div><small>KARAR</small><strong>API sözleşmesi v2</strong></div><b>✓</b></div>
+        <div class="float-card card-change"><span class="card-icon blue">⌁</span><div><small>DEĞİŞİKLİK</small><strong>commit kaydedildi</strong></div><b>↗</b></div>
+        <div class="float-card card-handoff"><span class="card-icon gold">◒</span><div><small>DEVİR</small><strong>Ayşe → Faruk</strong></div><b>•</b></div>
+        <div class="visual-label label-top">HAFIZA KATMANI</div><div class="visual-label label-bottom">GÜVENLİ · İZLENEBİLİR · PAYLAŞILABİLİR</div>
+      </div>
+    </section>
+    <section class="signal-strip"><div class="section-wrap signal-inner"><span>Bir ekip aynı soruyu tekrar tekrar çözmesin.</span><span class="signal-line"></span><span>Bağlam, doğru anda doğru kişiye ulaşsın.</span></div></section>
+    <section class="section section-wrap" id="neden">
+      <div class="section-intro"><div><div class="eyebrow">SORUNU DEĞİL, BAĞLAMI TAŞI</div><h2>Her proje ilerler.<br><em>Bilgi geride kalmaz.</em></h2></div><p>Chat geçmişleri dağılır, kararlar unutulur, yeni ekip üyeleri aynı keşifleri yeniden yapar. TeamBrain, önemli olanı kalıcı ve aranabilir hale getirir.</p></div>
+      <div class="feature-grid"><article class="feature-card"><span class="feature-number">01</span><div class="feature-symbol">⌁</div><h3>Kararlar kayıt altında</h3><p>Ne yaptığınızı değil, neden yaptığınızı da Markdown kayıtlarıyla koruyun.</p></article><article class="feature-card featured"><span class="feature-number">02</span><div class="feature-symbol">◎</div><h3>Her AI aynı bağlamda</h3><p>Terminal AI veya masaüstü AI, oturuma başlarken onaylı ortak hafızayı alır.</p></article><article class="feature-card"><span class="feature-number">03</span><div class="feature-symbol">↗</div><h3>GitHub ile senkron</h3><p>Ekip hafızası ayrı özel repoda yaşar. Kod reposu ve bilgi birbirine karışmaz.</p></article></div>
+    </section>
+    <section class="section dark-section" id="nasil"><div class="section-wrap"><div class="split-heading"><div><div class="eyebrow">BASİT BİR DÖNGÜ</div><h2>Akışın içine<br><em>yerleşir.</em></h2></div><p>Kurulumdan sonra TeamBrain, ekibin zaten kullandığı Git ve AI akışına sessizce eşlik eder.</p></div>
+      <div class="steps"><div class="step"><span class="step-index">01</span><h3>Kur</h3><p>Ekibin özel memory reposunu seç. Her bilgisayarı aynı ortak hafızaya bağla.</p></div><div class="step"><span class="step-index">02</span><h3>Çalış</h3><p>Terminal AI veya masaüstü AI ile kodunu geliştir. Commit’ler otomatik kayda dönüşür.</p></div><div class="step"><span class="step-index">03</span><h3>Paylaş</h3><p>Kararlar, devirler ve öğrenimler Markdown olarak GitHub’a senkronize edilir.</p></div></div>
+      <div class="flow-diagram"><span class="flow-node code">KOD REPOSU</span><b>→</b><span class="flow-node hook">TEAM HOOK</span><b>→</b><span class="flow-node memory">ÖZEL HAFIZA<br><small>GITHUB REPOSU</small></span><b>→</b><span class="flow-node team">TÜM EKİP</span></div>
+    </div></section>
+    <section class="section section-wrap" id="kurulum"><div class="install-card"><div class="install-copy"><div class="eyebrow">BEŞ DAKİKADA BAŞLA</div><h2>Bir komut.<br><em>Ortak bir zihin.</em></h2><p>TeamBrain’i kod reposunun yanında çalıştır. Ortak hafızayı ayrı, güvenli bir GitHub reposunda tut.</p><a class="button primary" href="https://github.com/BIRDEV-STUDIO/TeamBrain#kurulum" target="_blank" rel="noreferrer">Kurulum rehberini aç</a></div><div class="terminal"><div class="terminal-top"><span></span><span></span><span></span><small>teambrain / setup</small></div><pre><code><b>$</b> node teambrain setup
+  --repo <i>C:\Projects\my-app</i>
+  --url <i>github.com/org/teambrain-memory</i>
+
+<span class="success">✓</span> Hafıza reposu bağlandı
+<span class="success">✓</span> Git hook kuruldu
+<span class="success">✓</span> AI oturum protokolü hazır</code></pre></div></div></section>
+    <section class="section-wrap final-cta"><div class="cta-mark">✳</div><div><div class="eyebrow">BAĞLAMI KORU</div><h2>Ekip hafızanızı<br><em>bugün başlatın.</em></h2></div><a class="button primary" href="https://github.com/BIRDEV-STUDIO/TeamBrain" target="_blank" rel="noreferrer">TeamBrain’i GitHub’da aç</a></section>
+  </main>
+  <footer class="footer"><div class="section-wrap footer-inner"><a class="brand" href="#top"><span class="brand-mark"><i></i><i></i><i></i></span><span>teambrain<span class="dot">.</span></span></a><p>Ekibinizin ortak hafızası. Yerel, açık kaynak, Git-backed.</p><div class="footer-links"><a href="https://github.com/BIRDEV-STUDIO/TeamBrain" target="_blank" rel="noreferrer">GitHub</a><a href="https://github.com/BIRDEV-STUDIO/TeamBrain/blob/main/PRIVACY.md" target="_blank" rel="noreferrer">Gizlilik</a></div><small>© 2026 BIRDEV STUDIO</small></div></footer>
+  <script>const toggle=document.querySelector('.menu-toggle'),nav=document.querySelector('.nav');toggle.addEventListener('click',()=>{const open=nav.classList.toggle('open');toggle.setAttribute('aria-expanded',open)});nav.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>nav.classList.remove('open')));</script>
+</body>
+</html>

@@ -25,5 +25,5 @@ if defined TEAMBRAIN_MEMORY_ROOT (
   set "MEMORY_ROOT=%~dp0data"
 )
 echo Memory: %MEMORY_ROOT%
-node --experimental-sqlite bin\teambrain.js dashboard --root "%MEMORY_ROOT%" --port 7340 --open
+node --no-warnings --experimental-sqlite bin\teambrain.js dashboard --root "%MEMORY_ROOT%" --port 7340 --open
 pause

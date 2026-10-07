@@ -1,13 +1,24 @@
 {
   "name": "teambrain",
   "version": "0.5.0-rc.1",
+  "private": true,
   "description": "Local-first, Git-backed team memory",
   "type": "commonjs",
   "bin": { "teambrain": "bin/teambrain.js" },
+  "files": [
+    "bin/",
+    "src/",
+    "public/",
+    "README.md",
+    "SETUP.md",
+    "LICENSE",
+    "Start-TeamBrain.cmd",
+    "Start-TeamBrain.bat"
+  ],
   "scripts": {
     "test": "node test/run-all.js",
-    "start": "node --experimental-sqlite bin/teambrain.js dashboard --root ./data --open",
-    "cli": "node --experimental-sqlite bin/teambrain.js"
+    "start": "node --no-warnings --experimental-sqlite bin/teambrain.js dashboard --root ./data --open",
+    "cli": "node --no-warnings --experimental-sqlite bin/teambrain.js"
   },
   "engines": { "node": ">=22.18.0" },
   "license": "Apache-2.0"

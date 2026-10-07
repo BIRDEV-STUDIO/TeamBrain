@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const {loadProjectMemoryExport,publishInitialProjectMemory}=require('./project-memory-import');
+const {writeJsonAtomic}=require('./atomic-file');
 const SHARED = ['00-charter','10-decisions','20-projects','30-knowledge','40-handoffs','90-receipts/pending','99-archive'];
 const GITIGNORE_START='# teambrain:managed-ignore:start', GITIGNORE_END='# teambrain:managed-ignore:end';
 function ensureMemoryGitignore(root) {
@@ -96,6 +97,15 @@ function doctor(root) {
   try { const {execFileSync}=require('node:child_process'); git.repository=fs.existsSync(path.join(root,'.git')); git.identity=Boolean(execFileSync('git',['-C',root,'config','user.email'],{encoding:'utf8'}).trim()); git.remote=Boolean(execFileSync('git',['-C',root,'remote','get-url','origin'],{encoding:'utf8'}).trim()); } catch {}
   return {ok:checks.every(x=>x.available)&&dirs.every(x=>x.present), checks, optional, directories:dirs, git, integrations:{avenox:'manual-export-only', serena:optional.find(x=>x.name==='uv')?.available?'uvx-ready':'not-installed', codex:optional.find(x=>x.name==='codex')?.available?'installed':'not-installed', claude:optional.find(x=>x.name==='claude')?.available?'installed':'not-installed', gemini:optional.find(x=>x.name==='gemini')?.available?'installed':'not-installed', hook_trust:'manual-review-required'}};
 }
+function configureSync(root, enabled) {
+  const file=path.join(path.resolve(root),'.teambrain','connection.json');
+  if(!fs.existsSync(file)) throw new Error('TeamBrain connection is not configured.');
+  const connection=JSON.parse(fs.readFileSync(file,'utf8'));
+  connection.auto_sync=enabled===true;
+  connection.sync=enabled===true?'background':'manual';
+  writeJsonAtomic(file,connection);
+  return {configured:true,auto_sync:connection.auto_sync,sync:connection.sync,file};
+}
 function writeJsonExclusive(file, value) { fs.mkdirSync(path.dirname(file),{recursive:true}); fs.writeFileSync(file, JSON.stringify(value,null,2)+'\n',{flag:'wx'}); return file; }
 function publish(root, options) {
   if (!options.summary) throw new Error('publish requires --summary');
@@ -110,4 +120,4 @@ function handoff(root, options) {
   const file=path.join(root,'shared','40-handoffs',`${id}.md`); const body=`---\nschema_version: 1\nhandoff_id: ${id}\nproject_id: ${options.project||'teambrain'}\nfrom: ${options.from||process.env.USERNAME||'unknown'}\nto: ${options.to||'unassigned'}\ncreated_at: ${new Date().toISOString()}\nstatus: open\n---\n\n# Handoff\n\n${options.summary}\n\n## Sources\n\n${String(options.sources||'manual').split(',').map(x=>`- ${x.trim()}`).join('\n')}\n`;
   writeJsonExclusive(file+'.lock',{created_at:new Date().toISOString()}); fs.writeFileSync(file,body,{flag:'wx'}); fs.unlinkSync(file+'.lock'); return {created:true,file};
 }
-module.exports={bootstrap,doctor,publish,handoff,connectGithub,createGithubMemory,ensureMemoryGitignore,SHARED};
+module.exports={bootstrap,doctor,publish,handoff,connectGithub,createGithubMemory,configureSync,ensureMemoryGitignore,SHARED};

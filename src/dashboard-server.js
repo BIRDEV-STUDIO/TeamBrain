@@ -5,7 +5,7 @@ const path = require('node:path');
 const { Workspace } = require('./workspace');
 const { SyncWorker } = require('./sync-worker');
 const { checkForUpdate } = require('./update-check');
-const assets = { '/': ['index.html', 'text/html'], '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/app.css': ['app.css', 'text/css'], '/notifications.css': ['notifications.css', 'text/css'], '/notifications.js': ['notifications.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'] };
+const assets = { '/': ['index.html', 'text/html'], '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/app.css': ['app.css', 'text/css'], '/projects.css': ['projects.css', 'text/css'], '/notifications.css': ['notifications.css', 'text/css'], '/notifications.js': ['notifications.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'] };
 
 function guard(req) {
   const expected = `127.0.0.1:${req.socket.localPort}`;

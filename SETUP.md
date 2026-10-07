@@ -17,6 +17,28 @@ The dashboard-generated command uses the actual TeamBrain checkout path, so user
 may clone the public application outside `C:\TeamBrain`; the paths below are only
 Windows examples.
 
+## Personal, local-only setup
+
+For a single-user second brain that must never synchronize to GitHub, clone the
+public application and create a separate local memory directory:
+
+```powershell
+git clone https://github.com/BIRDEV-STUDIO/TeamBrain.git C:\TeamBrain
+cd C:\TeamBrain
+npm.cmd install
+node --no-warnings --experimental-sqlite bin\teambrain.js bootstrap --root C:\TeamBrain-memory --project TeamBrain-memory
+node --no-warnings --experimental-sqlite bin\teambrain.js install codex-hook --root C:\TeamBrain-memory --teambrain-root C:\TeamBrain
+```
+
+Review and trust the new hook once with `/hooks`, then start the dashboard with
+`Start-TeamBrain.cmd`. Each Codex working directory is created as a separate
+project under **Kişisel Projeler**. The hook stores changed paths and repository
+metadata only; it does not copy prompts, transcripts, patches, or file contents.
+The personal project tree is excluded from Git even if the memory directory later
+becomes a repository. If that memory checkout already has a connection file, run
+`node --experimental-sqlite bin\teambrain.js sync disable --root C:\TeamBrain-memory`
+to keep synchronization manual and local.
+
 1. Install Git, Node.js 22.18+, and optionally `gh`.
 2. Create a repository under the team's GitHub organization (private is recommended), either in GitHub or directly from TeamBrain:
 

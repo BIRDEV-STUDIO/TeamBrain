@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "receipt_id": "20261007212352674-49e6043a",
+  "project_id": "teambrain",
+  "actor_id": "codex",
+  "created_at": "2026-10-07T21:23:52.676Z",
+  "summary": "Dashboard Projeler başlığı tıklanabilir bir proje tarayıcısına dönüştürüldü; kişisel projeler ayrı kartlarda, kaynak klasörüyle gösteriliyor ve tek tıkla seçili projenin hafızası açılıyor.",
+  "sources": [
+    "public/index.html",
+    "public/app.js",
+    "public/projects.css",
+    "src/workspace.js",
+    "test/project-navigation-ui.test.js"
+  ],
+  "privacy_review": true,
+  "status": "pending",
+  "related_decisions": [],
+  "related_commits": [],
+  "follow_ups": []
+}

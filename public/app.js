@@ -14,7 +14,7 @@ const names = {
   'chat.message': 'Sohbet mesajı',
   'chat.reply.generated': 'Yerel yanıt'
 };
-const views = { overview: 'Genel bakış', team: 'Ekip', chat: 'Sohbet', activity: 'Aktivite', decisions: 'Karar defteri', calendar: 'Takvim', tasks: 'Görevler', daily: 'Günün özeti', integrations: 'Bağlantılar' };
+const views = { overview: 'Genel bakış', projects: 'Projeler', team: 'Ekip', chat: 'Sohbet', activity: 'Aktivite', decisions: 'Karar defteri', calendar: 'Takvim', tasks: 'Görevler', daily: 'Günün özeti', integrations: 'Bağlantılar' };
 const date = value => new Date(value).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
 const time = value => new Date(value).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 const today = new Date().toLocaleDateString('tr-TR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
@@ -290,20 +290,28 @@ function renderList() {
 }
 function renderShell(data, decisions) {
   document.body.classList.toggle('calendar-active', state.view === 'calendar');
-  $('breadcrumb').textContent = `${team()?.name || 'Çalışma alanı'}${data ? ' / ' + data.project.name : ''}`;
+  $('breadcrumb').textContent = state.view === 'projects' ? `${team()?.name || 'Çalışma alanı'} / Projeler` : `${team()?.name || 'Çalışma alanı'}${data ? ' / ' + data.project.name : ''}`;
   $('heading').textContent = state.view === 'overview' ? data?.project.name || 'Ekibinin ortak hafızası.' : views[state.view];
-  $('subtitle').textContent = state.view === 'chat' ? 'Projenin hafızasıyla konuş; her mesaj aynı zamanda kayıt olur.' : state.view === 'overview' ? 'Kararlar, çalışmalar ve onları birbirine bağlayan nedenler.' : 'Seçili projenin bilgisi. İhtiyacın olan bağlam, bir arada.';
+  $('subtitle').textContent = state.view === 'projects' ? 'Kişisel projelerini ayrı hafızalar olarak aç ve aralarında geçiş yap.' : state.view === 'chat' ? 'Projenin hafızasıyla konuş; her mesaj aynı zamanda kayıt olur.' : state.view === 'overview' ? 'Kararlar, çalışmalar ve onları birbirine bağlayan nedenler.' : 'Seçili projenin bilgisi. İhtiyacın olan bağlam, bir arada.';
   $('profile').textContent = (data?.actor || 'Y').slice(0, 1).toUpperCase();
   $('profile').title = data?.actor || 'Yerel kullanıcı';
   $('new-event').disabled = !data;
   $('upload-document').disabled = !data;
+  $('new-event').hidden = state.view === 'projects';
+  $('upload-document').hidden = state.view === 'projects';
   $('hero').hidden = state.view !== 'overview';
   $('hero-action').textContent = !state.team ? 'İlk ekibini oluştur ↗' : !state.project ? 'İlk projeni oluştur ↗' : 'Bir karar kaydet ↗';
-  $('metrics').hidden = !data || state.view === 'integrations' || state.view === 'chat';
+  $('metrics').hidden = !data || state.view === 'integrations' || state.view === 'chat' || state.view === 'projects';
   $('metrics').innerHTML = [[data?.total || 0, 'Toplam kayıt', 'Projenin kalıcı hafızası', '≋'], [decisions.length, 'Karar kaydı', 'Gerekçesiyle birlikte', '◇'], [events().filter(e => e.event_type === 'issue.detected').length, 'Sorun kaydı', 'Açık/kapalı takibi henüz yok', '◌'], [new Set(events().map(e => e.actor_id)).size, 'Katkı veren', 'Kayıtlardaki farklı kişiler', '↗']].map(([n, label, hint, icon]) => `<div class="metric"><div class="metric-top"><span>${label}</span><span>${icon}</span></div><strong>${n}</strong><small>${hint}</small></div>`).join('');
   document.querySelectorAll('[data-view]').forEach(b => { b.classList.toggle('active', b.dataset.view === state.view); b.setAttribute('aria-current', b.dataset.view === state.view ? 'page' : 'false'); });
+  $('browse-projects').classList.toggle('active', state.view === 'projects');
+  $('browse-projects').setAttribute('aria-current', state.view === 'projects' ? 'page' : 'false');
   renderNotificationLights();
   renderNotificationCenter();
+}
+function renderProjects() {
+  const projects = team()?.projects || [];
+  $('content').innerHTML = `<div class="project-gallery-heading"><div><span class="eyebrow">${team()?.local_only ? 'YEREL İKİNCİ BEYİN' : 'ÇALIŞMA ALANI'}</span><h2>${escape(team()?.name || 'Projeler')}</h2><p>${projects.length} proje ayrı hafıza alanında tutuluyor.</p></div><button class="primary" data-action="project">＋ Yeni proje</button></div><section class="project-gallery">${projects.map(project => `<button type="button" class="project-card ${project.id === state.project ? 'selected' : ''}" data-project-open="${escape(project.id)}"><span class="project-card-icon">✳</span><span class="project-card-body"><span class="project-card-top"><strong>${escape(project.name)}</strong><span class="badge">${project.source_root ? 'OTOMATİK' : 'YEREL'}</span></span><small>${project.source_root ? escape(project.source_root) : 'TeamBrain yerel proje alanı'}</small><span class="project-card-action">Projeyi aç <b>→</b></span></span></button>`).join('') || `<div class="panel">${empty('Henüz proje yok.', 'Artı düğmesiyle ilk kişisel projenizi oluşturun.', { id: 'project', text: '＋ Proje oluştur' })}</div>`}</section>`;
 }
 function plannerEditor(mode, selectedDate = '') {
   state.mode = mode; $('form-error').textContent = '';
@@ -336,6 +344,7 @@ function render() {
   if (state.view === 'team') { renderTeam(); return; }
   if (state.view === 'chat' && !state.project) { renderChat(); return; }
   if (state.view === 'integrations') { renderConnections(); return; }
+  if (state.view === 'projects') { renderProjects(); return; }
   if (!state.project) {
     const labels = {
       overview: ['Bu ekibin ilk projesini ekle.', 'Genel bakış, proje kayıtları oluşturulduğunda burada görünür.'],
@@ -446,9 +455,12 @@ async function detail(eventId) {
   }
 }
 $('team').addEventListener('change', async e => { state.team = e.target.value; state.project = team()?.projects[0]?.id || null; state.query = ''; rememberSelection(); choose(); await loadTeamChat(); await loadProject(); });
-$('projects').addEventListener('click', async e => { const b = e.target.closest('[data-project]'); if (b) { state.project = b.dataset.project; state.query = ''; state.type = ''; rememberSelection(); choose(); await loadProject(); } });
+$('projects').addEventListener('click', async e => { const b = e.target.closest('[data-project]'); if (b) { state.project = b.dataset.project; if (state.view === 'projects') state.view = 'overview'; state.query = ''; state.type = ''; rememberSelection(); choose(); await loadProject(); } });
+$('browse-projects').addEventListener('click', () => { state.view = 'projects'; state.query = ''; state.type = ''; render(); });
 $('nav').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) { state.view = b.dataset.view; state.query = ''; state.type = ''; markViewSeen(); render(); } });
 $('content').addEventListener('click', async e => {  const calendarNav = e.target.closest('[data-calendar-nav]')?.dataset.calendarNav;
+  const projectCard = e.target.closest('[data-project-open]');
+  if (projectCard) { state.project = projectCard.dataset.projectOpen; state.view = 'overview'; state.query = ''; state.type = ''; rememberSelection(); choose(); await loadProject(); return; }
   if (calendarNav) { const cursor = state.calendarCursor || new Date(); if (calendarNav === 'today') state.calendarCursor = new Date(); else state.calendarCursor = new Date(cursor.getFullYear(), cursor.getMonth() + (calendarNav === 'next' ? 1 : -1), 1); render(); return; }
   const calendarDay = e.target.closest('[data-calendar-date]');
   if (calendarDay) {

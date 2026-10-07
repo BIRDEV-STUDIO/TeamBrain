@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "receipt_id": "20261007210702284-9462dcea",
+  "project_id": "teambrain",
+  "actor_id": "codex",
+  "created_at": "2026-10-07T21:07:02.287Z",
+  "summary": "Yerel Codex oturumları artık her çalışma alanını Kişisel Projeler altında otomatik eşliyor ve yalnızca somut dosya veya commit değişikliklerini TeamBrain eventlerine kaydediyor; ham sohbet, patch ve dosya içeriği alınmıyor.",
+  "sources": [
+    "src/codex-capture.js",
+    "test/codex-capture.test.js",
+    "README.md",
+    "official-openai-hooks-docs"
+  ],
+  "privacy_review": true,
+  "status": "pending",
+  "related_decisions": [],
+  "related_commits": [],
+  "follow_ups": [
+    "Yeni Codex oturumunda /hooks üzerinden değişen hook tanımını inceleyip güvenilir olarak işaretle"
+  ]
+}

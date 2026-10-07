@@ -3,7 +3,7 @@ const fs=require('node:fs'); const path=require('node:path'); const {execFileSyn
 class SyncWorker {
   constructor(root, intervalMs=30000) { this.root=root; this.intervalMs=intervalMs; this.timer=null; this.running=false; this.last={state:'idle'}; }
   connection() { try { return JSON.parse(fs.readFileSync(path.join(this.root,'.teambrain','connection.json'),'utf8')); } catch { return null; } }
-  git(args) { return execFileSync('git',['-C',this.root,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim(); }
+  git(args) { return execFileSync('git',['-C',this.root,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:15000}).trim(); }
   syncPaths() {
     const teams=path.join(this.root,'teams');
     const shared=['shared'];

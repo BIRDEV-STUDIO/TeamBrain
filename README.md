@@ -329,6 +329,12 @@ node --experimental-sqlite bin/teambrain.js update --check
 
 `publish` writes one personal-data-reviewed receipt to `shared/90-receipts/pending/`. A human review must promote it to a canonical decision, project, or knowledge record. Raw conversations are never a publish input. During connection setup the user chooses manual or background synchronization; background mode is restricted to the selected memory repository's `shared/` and `teams/` records and pauses on conflicts.
 
+To keep an existing memory checkout entirely local, disable its background Git activity without deleting the local connection metadata:
+
+```powershell
+node --experimental-sqlite bin/teambrain.js sync disable --root C:\TeamBrain-memory
+```
+
 ### Team onboarding
 
 The public TeamBrain application repository is only the software. Each team creates its own memory repository inside its GitHub user or organization, normally private. A maintainer grants repository access to each member's individual GitHub account. Each member then runs:
@@ -343,6 +349,16 @@ The `actor` value is the stable member identity in receipts and handoffs; never 
 `github create-memory` is the one-command version: it uses the user's existing `gh auth login` session, creates the repository under the selected account or organization, then connects it locally. Private visibility is the default.
 
 `connect project` installs a Git `post-commit` hook. Every commit made by terminal AI or a human becomes a `change.recorded` event in the selected TeamBrain project; the background worker then sends it to GitHub while the dashboard is running and automatic synchronization is enabled. Only commit metadata, changed paths, and file statistics are captured, never patch bodies or raw terminal conversations.
+
+### Local Codex second-brain capture
+
+Codex work can be captured locally without GitHub and without keeping the dashboard process open:
+
+```powershell
+node --experimental-sqlite C:\TeamBrain\bin\teambrain.js install codex-hook --root C:\TeamBrain-memory --teambrain-root C:\TeamBrain
+```
+
+The installer preserves existing Codex hooks and adds `SessionStart`, `Stop`, and `SessionEnd` handlers. On the next Codex session, review and trust the changed hook with `/hooks`. Each working directory is mapped automatically to a project under the local-only **Kişisel Projeler** team. A `change.recorded` event is written only when the Git state, commit, or local file manifest changes. The hook records changed paths and repository metadata; it never copies prompts, transcripts, patches, or file contents. Local-only projects are excluded from TeamBrain's Git synchronization paths.
 
 The dashboard can create a team directly from `＋ Ekip oluştur`. Enter the team's exact GitHub repository URL; TeamBrain verifies that the repository is reachable, derives the team name when it is left blank, prevents the same repository from being linked twice, and stores the link in the team's metadata. All projects and chat messages created under that team remain isolated under that GitHub-backed team workspace. The repository must already exist and the current user must have Git access; TeamBrain does not silently create repositories or bypass GitHub permissions.
 

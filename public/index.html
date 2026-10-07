@@ -5,7 +5,7 @@
   <title>TeamBrain · Ekip hafızası</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <style>.page-actions{display:flex;align-items:center;gap:8px}.update-notice{margin:0 0 18px;padding:13px 16px;border:1px solid #b8d98a;border-radius:12px;background:#eff8df;color:#294c37;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:12px}.update-notice[hidden]{display:none}.update-notice a{color:inherit;font-weight:700}.update-notice button{border:0;background:transparent;color:inherit;cursor:pointer;font-size:18px;line-height:1;padding:0 2px}:root.dark .update-notice{background:#30452f;color:#e2f0d7;border-color:#5f8350}</style>
-  <link rel="stylesheet" href="/app.css"><link rel="stylesheet" href="/notifications.css"><script src="/notifications.js" defer></script><script src="/app.js" defer></script>
+  <link rel="stylesheet" href="/app.css"><link rel="stylesheet" href="/projects.css"><link rel="stylesheet" href="/notifications.css"><script src="/notifications.js" defer></script><script src="/app.js" defer></script>
 </head>
 <body>
   <aside class="sidebar">
@@ -22,7 +22,7 @@
       <button data-view="calendar"><span>◷</span> Takvim</button><button data-view="tasks"><span>✓</span> Görevler</button><button data-view="daily"><span>◷</span> Günün özeti</button>
       <button data-view="integrations"><span>⌘</span> Bağlantılar</button>
     </nav>
-    <div class="project-label"><span>PROJELER</span><button id="add-project" aria-label="Yeni proje">＋</button></div>
+    <div class="project-label"><button id="browse-projects" class="project-browser" type="button" aria-label="Tüm projeleri aç">PROJELER <span aria-hidden="true">›</span></button><button id="add-project" aria-label="Yeni proje">＋</button></div>
     <div id="projects" class="projects"></div>
     <div class="sidebar-bottom"><span class="status-dot"></span><div>Bu bilgisayarda çalışıyor<small>Hafızan, senin kontrolünde.</small></div></div>
   </aside>

@@ -77,8 +77,10 @@ class Workspace {
       const legacy = fs.existsSync(path.join(base, '.teambrain', 'config.json'));
       const record = fs.existsSync(meta) ? JSON.parse(fs.readFileSync(meta, 'utf8')) : { name: legacy ? load(base).team_name || team : team };
       const projects = directories(path.join(base, 'projects')).map(project => {
-        const config = load(this.projectPath(team, project));
-        return { id: project, name: config.project_name || config.project_id };
+        const projectRoot = this.projectPath(team, project), config = load(projectRoot);
+        let source = null;
+        try { source = JSON.parse(fs.readFileSync(path.join(projectRoot, '.teambrain', 'source.json'), 'utf8')); } catch {}
+        return { id: project, name: config.project_name || config.project_id, source_root: typeof source?.path === 'string' ? source.path : null, source_kind: typeof source?.kind === 'string' ? source.kind : null };
       });
       if (legacy) projects.unshift({ id: 'legacy', name: 'Önceki kayıtlar' });
       const memberData = readMembers(base);
@@ -167,7 +169,10 @@ class Workspace {
       reconcileIndex(root, config, db);
       const legacyChat = migrateLegacyChat(root, db), chat = legacyChat.messages;
       const events = [...timeline(db, 1000), ...chat].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 1000);
-      const connection = this.connection(root);
+      const selectedTeam = this.teams().find(item => item.id === team);
+      const connection = selectedTeam?.local_only
+        ? { github: { connected: false }, serena: { configured: fs.existsSync(path.join(root, '.serena', 'project.yml')) }, avenox: { mode: 'manual-export-only' } }
+        : this.connection(root);
       return {
         project: { id: project, name: config.project_name || config.project_id },
         actor: config.actor_id,
@@ -175,7 +180,7 @@ class Workspace {
         chat,
         total: db.prepare('SELECT count(*) AS total FROM events').get().total + chat.length,
         sync: connection.github?.sync || 'manual', integrations: 'local', connection, planner: planner(this.projectPath(team, project)),
-        members: this.teams().find(item => item.id === team)?.members || [], documents: listDocuments(root)
+        members: selectedTeam?.members || [], documents: listDocuments(root)
       };
     });
   }

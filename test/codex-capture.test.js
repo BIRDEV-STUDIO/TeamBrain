@@ -69,8 +69,37 @@ test('Codex hook installer preserves existing hooks and is idempotent', () => {
     installCodexHook({ file, root, 'teambrain-root': path.resolve(__dirname, '..') });
     const hooks = JSON.parse(fs.readFileSync(file, 'utf8')).hooks;
     assert.equal(hooks.SessionStart.length, 2);
+    assert.equal(hooks.UserPromptSubmit.length, 1);
     assert.equal(hooks.Stop.length, 1);
     assert.equal(hooks.SessionEnd.length, 1);
     assert.equal(hooks.SessionStart[0].hooks[0].command, 'existing');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('UserPromptSubmit recovers a missed session start and captures on the next turn', () => {
+  const memory = temporary('memory-prompt-');
+  const repo = temporary('repo-prompt-');
+  try {
+    bootstrap(memory, 'memory');
+    git(repo, ['init']);
+    git(repo, ['config', 'user.email', 'test@example.com']);
+    git(repo, ['config', 'user.name', 'Test']);
+    fs.writeFileSync(path.join(repo, 'app.txt'), 'before\n');
+    git(repo, ['add', 'app.txt']);
+    git(repo, ['commit', '-m', 'Initial']);
+
+    const baseline = captureCodex({ root: memory }, { session_id: 'session-prompt', cwd: repo, hook_event_name: 'UserPromptSubmit', prompt: 'must not be stored' });
+    assert.equal(baseline.captured, false);
+    fs.writeFileSync(path.join(repo, 'app.txt'), 'after\n');
+    const captured = captureCodex({ root: memory }, { session_id: 'session-prompt', cwd: repo, hook_event_name: 'UserPromptSubmit', prompt: 'must not be stored' });
+    assert.equal(captured.captured, true);
+    const workspace = new Workspace(memory);
+    const snapshot = workspace.snapshot(captured.team_id, captured.project_id);
+    assert.equal(snapshot.events.length, 1);
+    assert.match(snapshot.events[0].body, /app\.txt/);
+    assert.doesNotMatch(snapshot.events[0].body, /must not be stored/);
+  } finally {
+    fs.rmSync(memory, { recursive: true, force: true });
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
 });

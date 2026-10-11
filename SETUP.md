@@ -30,7 +30,9 @@ node --no-warnings --experimental-sqlite bin\teambrain.js bootstrap --root C:\Te
 node --no-warnings --experimental-sqlite bin\teambrain.js install codex-hook --root C:\TeamBrain-memory --teambrain-root C:\TeamBrain
 ```
 
-Review and trust the new hook once with `/hooks`, then start the dashboard with
+The hook listens to `SessionStart`, `UserPromptSubmit`, `Stop`, and `SessionEnd` so
+a prompt event can recover the baseline when a client misses session start. Review
+and trust the new hook once with `/hooks`, then start the dashboard with
 `Start-TeamBrain.cmd`. Each Codex working directory is created as a separate
 project under **Kişisel Projeler**. The hook stores changed paths and repository
 metadata only; it does not copy prompts, transcripts, patches, or file contents.

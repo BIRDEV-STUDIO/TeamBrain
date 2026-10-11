@@ -10,6 +10,9 @@
   the dashboard is closed; later successful syncs retry unpushed commits and clear
   stale attention markers.
 - Added project-scoped document import for text, CSV/TSV/JSON, DOCX, XLSX/XLSM and PDF files. Readable text is converted to traceable Markdown instead of committing original binary files.
+- Personal Codex capture now listens to `UserPromptSubmit` as a recovery point, so
+  project folders and Markdown change records still work when a client misses the
+  initial session event.
 
 All notable changes are documented here.
 

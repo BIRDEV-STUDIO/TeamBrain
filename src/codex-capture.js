@@ -14,6 +14,7 @@ const { writeJsonAtomic } = require('./atomic-file');
 
 const TEAM_AUTOMATION_KEY = 'codex-personal-v1';
 const TEAM_NAME = 'Kişisel Projeler';
+const CAPTURE_EVENTS = [['SessionStart', 10], ['UserPromptSubmit', 10], ['Stop', 10], ['SessionEnd', 3]];
 const IGNORED_DIRECTORIES = new Set(['.git', '.teambrain', '.codex', 'node_modules', 'build', 'dist', 'coverage', '.dart_tool', '.next']);
 
 function safeJson(file, fallback = null) {
@@ -231,13 +232,13 @@ function installCodexHook(options = {}) {
       timeout
     }]
   });
-  for (const [event, timeout] of [['SessionStart', 10], ['Stop', 10], ['SessionEnd', 3]]) {
+  for (const [event, timeout] of CAPTURE_EVENTS) {
     const entries = Array.isArray(document.hooks[event]) ? document.hooks[event].filter(entry => !marker(entry)) : [];
     entries.push(handler(timeout));
     document.hooks[event] = entries;
   }
   writeJson(hooksFile, document);
-  return { installed: true, file: hooksFile, memory_root: memoryRoot, events: ['SessionStart', 'Stop', 'SessionEnd'], trust_required: true };
+  return { installed: true, file: hooksFile, memory_root: memoryRoot, events: CAPTURE_EVENTS.map(([event]) => event), trust_required: true };
 }
 
 module.exports = { captureCodex, installCodexHook, snapshot, mappedProject };

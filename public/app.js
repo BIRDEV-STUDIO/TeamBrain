@@ -1,7 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const state = { teams: [], team: null, project: null, snapshot: null, teamChat: [], actors: [], memberRefresh: {}, chatScope: 'team', view: 'overview', calendarCursor: new Date(), selectedCalendarDate: null, notificationSection: 'general', updateInfo: null, query: '', type: '', mode: null, version: 0 };
+const state = { teams: [], team: null, project: null, snapshot: null, syncHealth: null, teamChat: [], actors: [], memberRefresh: {}, chatScope: 'team', view: 'overview', calendarCursor: new Date(), selectedCalendarDate: null, notificationSection: 'general', updateInfo: null, query: '', type: '', mode: null, version: 0 };
 const notificationTracker = new TeamBrainNotifications.NotificationTracker(localStorage);
 const names = {
   'note.created': 'Not',
@@ -237,7 +237,7 @@ async function showSetupGuide(teamId) {
 }
 async function reloadTeams() {
   if (!state.actors.length) state.actors = (await api('/api/identity')).aliases || [];
-  state.teams = await api('/api/teams');
+  [state.teams, state.syncHealth] = await Promise.all([api('/api/teams'), api('/api/sync')]);
   restoreSelection();
   choose();
   await loadTeamChat();
@@ -582,9 +582,9 @@ async function pollIncomingUpdates() {
   updatePollRunning = true;
   const selectedTeam = state.team, selectedProject = state.project;
   try {
-    const requests = [api('/api/teams'), api(`/api/teams/${selectedTeam}/chat`)];
+    const requests = [api('/api/teams'), api(`/api/teams/${selectedTeam}/chat`), api('/api/sync')];
     if (selectedProject) requests.push(api(`/api/teams/${selectedTeam}/projects/${selectedProject}`));
-    let [teams, teamChat, snapshot] = await Promise.all(requests);
+    const results = await Promise.all(requests); let teams = results[0]; const teamChat = results[1], syncHealth = results[2], snapshot = selectedProject ? results[3] : null;
     if (state.team !== selectedTeam || state.project !== selectedProject) return;
     const selected = teams.find(item => item.id === selectedTeam);
     if (selected?.github_repo && Date.now() - (state.memberRefresh[selectedTeam] || 0) > 5 * 60 * 1000) {
@@ -593,6 +593,7 @@ async function pollIncomingUpdates() {
     }
     state.teams = teams;
     state.teamChat = teamChat;
+    state.syncHealth = syncHealth;
     if (snapshot) state.snapshot = snapshot;
     choose();
     const userIsTyping = document.activeElement?.matches('input, textarea, select') || $('editor').open || $('detail').open;
@@ -612,9 +613,12 @@ reloadTeams().catch(error => { $('content').textContent = 'Bağlantı kurulamad�
 function renderConnections() {
   const c = state.snapshot?.connection || {};
   const github = c.github?.connected ? `Bağlı · ${escape(c.github.actor_id || 'kimlik yok')}` : 'Bağlı değil';
+  const sync = state.syncHealth || {}, syncLabel = !sync.enabled ? 'MANUEL' : sync.state === 'synced' && sync.verified_remote ? 'DOĞRULANDI' : sync.state === 'attention-required' ? 'MÜDAHALE GEREKLİ' : 'GÖNDERİM BEKLİYOR';
+  const syncText = !sync.enabled ? 'Otomatik gönderim kapalı.' : sync.state === 'synced' && sync.verified_remote ? `GitHub teslimatı doğrulandı${sync.commit ? ` · ${escape(sync.commit.slice(0, 12))}` : ''}.` : `${escape(sync.message || 'Senkronizasyon henüz doğrulanmadı.')} Bekleyen değişiklik: ${Number(sync.pending_changes || 0)}.`;
   const serena = c.serena?.configured ? 'Proje yapılandırması bulundu' : 'Yerel kod projesinde etkinleştirilmeli';
   const cards = [
     ['Git paylaşımı', github, c.github?.connected ? `Remote: ${escape(c.github.remote || '')}. Pull/push işlemleri açık ve bilinçlidir.` : 'Memory reposunu SETUP.md veya connect github komutuyla bağla.'],
+    ['Otomatik teslimat', syncLabel, syncText],
     ['Chat sağlayıcıları', 'Yerel motor aktif', 'Sohbet yerel TeamBrain kayıtlarını arar; harici AI sağlayıcısı otomatik çağrılmaz.'],
     ['Serena', serena, 'Serena yalnızca kod sembolleri ve güvenli refactor içindir; ekip hafızasının sahibi değildir.'],
     ['AvenoxBeyin', 'Özel / manuel aktarım', 'Kişisel vault otomatik okunmaz. Yalnızca gizlilikten geçirilmiş özet aktarılır.'],

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Made automatic memory delivery durable and observable: local commit before network
+  transfer, exclusive synchronization lock, periodic retry after runtime enablement,
+  persisted retry state, and remote commit verification.
+- Made commit capture idempotent and changed hook installation to replace stale
+  TeamBrain-managed targets instead of silently retaining the wrong project.
+- Hardened setup with exact remote matching, explicit actor validation, source binding,
+  dirty-checkout protection, final installation verification, and health endpoints.
+- Added the same managed TeamBrain session contract to `CLAUDE.md` for Claude Code,
+  while preserving pre-existing Claude project instructions.
+- Added a privacy-gated repair command for moving historical Git-hook events from a
+  stale project target without changing event identity.
+
 - Added one-command, AI-guided `setup` with explicit repository, identity, sync,
   startup, team, project and final-confirmation gates.
 - Added managed `AGENTS.md` installation for bounded shared context, assigned tasks

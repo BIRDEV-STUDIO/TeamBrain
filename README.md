@@ -156,11 +156,16 @@ Automatic synchronization is opt-in in `.teambrain/connection.json`. When
    or authentication failure.
 
 Dashboard writes trigger an immediate sync attempt; the worker also retries every
-30 seconds. Authentication errors, conflicts, or another Git attention state are
-not resolved automatically. The worker records `attention-required` and leaves the
-repository for a human to inspect. A later successful synchronization removes the
-old `sync-state.json` failure marker. Confirm health with `git status`, the remote
-branch, and a fresh dashboard operation.
+30 seconds, including when automatic sync is enabled after the dashboard has already
+started. Before network transfer it commits the selected local records, uses an
+exclusive lock so dashboard and hook sends cannot collide, pushes, and verifies that
+the remote branch resolves to the same commit. Authentication errors, conflicts, or
+another Git attention state are not resolved automatically. Local records and their
+commit remain durable; `.teambrain/sync-state.json` records the retry count, next
+retry time, and whether remote delivery was verified. Check `/api/health`,
+`teambrain sync status`, or `teambrain doctor --root <memory-root>` for delivery
+health. Enabling sync refuses unreviewed deletions; after inspection, use
+`teambrain sync enable --root <memory-root> --reviewed true`.
 
 The synchronized `teams/` scope includes the complete content entered into
 TeamBrain's own team/project chat, notes/events, task and calendar data, project
@@ -202,9 +207,17 @@ the product/code repository itself.
   handoffs, explicit synchronization, and hook installation.
 - A Git hook runs on commits regardless of whether the commit came from a terminal,
   but the hook must have been explicitly installed first.
-- Setup installs a managed `AGENTS.md` contract. Codex CLI and Codex desktop read
-  repository `AGENTS.md` instructions, so they run `session start` for compact team
-  context and assigned tasks, then `session finish` for one reviewed outcome.
+- Re-running setup replaces the TeamBrain-managed hook block with the confirmed
+  team/project target. It does not accept a stale target merely because a hook exists.
+- Commit capture is idempotent for the same repository and commit, so hook retries do
+  not create duplicate memory events.
+- A reviewed `repair reassign-events` command can move historical Git-hook records
+  from an incorrectly configured project while preserving event IDs and rebuilding
+  both project indexes. It refuses to run without `--reviewed true`.
+- Setup installs matching managed blocks in `AGENTS.md` and `CLAUDE.md` while
+  preserving existing content. Codex uses `AGENTS.md`; Claude Code uses `CLAUDE.md`.
+  Both receive the same `session start` context/task command and `session finish`
+  reviewed-outcome contract when they can run local tools.
 - `session start` first synchronizes the memory repository and returns approved
   charter/decision/project/knowledge documents within a bounded context budget,
   recent project activity without full bodies, and tasks assigned to the actor.
@@ -223,6 +236,9 @@ Test-NetConnection 127.0.0.1 -Port 7340
 
 # Which identity and memory root does the running dashboard expose?
 Invoke-RestMethod http://127.0.0.1:7340/api/identity
+
+# Is automatic delivery enabled, pending, retrying, or remotely verified?
+Invoke-RestMethod http://127.0.0.1:7340/api/health
 
 # Are the runtime, memory layout, Git identity and remote available?
 node --experimental-sqlite C:\TeamBrain\bin\teambrain.js doctor `

@@ -13,6 +13,14 @@ function ensureMemoryGitignore(root) {
   const start=current.indexOf(GITIGNORE_START), end=current.indexOf(GITIGNORE_END); if(start>=0&&end>=start) current=current.slice(0,start)+block+current.slice(end+GITIGNORE_END.length); else current=`${current.trim()}${current.trim()?'\n':''}${block}\n`;
   fs.writeFileSync(file,current.endsWith('\n')?current:`${current}\n`); return file;
 }
+function commitManagedGitignore(root) {
+  const {execFileSync}=require('node:child_process'),run=args=>execFileSync('git',['-C',root,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+  if(!run(['status','--porcelain','--','.gitignore'])) return null;
+  if(!run(['config','user.email'])) throw new Error('Git user.email is required to record the managed memory .gitignore.');
+  execFileSync('git',['-C',root,'add','--','.gitignore'],{stdio:'ignore'});
+  execFileSync('git',['-C',root,'commit','-m','chore: configure TeamBrain memory','--','.gitignore'],{stdio:'ignore'});
+  return run(['rev-parse','HEAD']);
+}
 function askQuestion(prompt, fallback = '') {
   const readline=require('node:readline'); const io=readline.createInterface({input:process.stdin,output:process.stdout});
   return new Promise(resolve=>io.question(`${prompt}${fallback ? ` [${fallback}]` : ''}: `,answer=>{io.close();resolve(answer.trim() || fallback);}));
@@ -64,10 +72,11 @@ async function connectGithub(url, destination, actor, autoSync, confirmed=false)
   const remote=execFileSync('git',['-C',target,'remote','get-url','origin'],{encoding:'utf8'}).trim();
   const canonical=value=>String(value).trim().replace(/\.git$/i,'').replace(/\/$/,'').toLowerCase();
   if(canonical(remote)!==canonical(url)) throw new Error(`Existing destination points to a different repository: ${remote}`);
-  ensureMemoryGitignore(target);
-  const automatic=await askAutoSync(autoSync); const connection=path.join(target,'.teambrain','connection.json'); fs.mkdirSync(path.dirname(connection),{recursive:true}); fs.writeFileSync(connection,JSON.stringify({schema_version:1,provider:'github',remote,actor_id:actor||process.env.USERNAME||'unknown',connected_at:new Date().toISOString(),auto_sync:automatic,sync:automatic?'background':'manual',sync_scope:['shared','teams']},null,2)+'\n');
+  ensureMemoryGitignore(target); commitManagedGitignore(target);
+  const automatic=await askAutoSync(autoSync); const connection=path.join(target,'.teambrain','connection.json'); fs.mkdirSync(path.dirname(connection),{recursive:true}); fs.writeFileSync(connection,JSON.stringify({schema_version:1,provider:'github',remote,actor_id:actor||process.env.USERNAME||'unknown',connected_at:new Date().toISOString(),auto_sync:false,sync:'manual',sync_scope:['shared','teams']},null,2)+'\n');
   bootstrap(target, path.basename(target));
   const initial_contribution=initialContribution ? publishInitialProjectMemory(target,initialContribution,actor||process.env.USERNAME||'unknown',publish) : null;
+  configureSync(target,automatic);
   return {connected:true, memory_root:target, remote, actor_id:actor||process.env.USERNAME||'unknown',auto_sync:automatic, initial_contribution:initial_contribution ? {status:'pending',project_id:initialContribution.project_id,file:initial_contribution.file} : null, next_steps:['teambrain doctor --root "'+target+'"','teambrain context --root "'+target+'"','teambrain dashboard --root "'+target+'"']};
 }
 async function createGithubMemory(owner, name, visibility, destination, actor, autoSync) {
@@ -95,16 +104,31 @@ function doctor(root) {
   const dirs = paths(root).map(dir => ({path:dir, present:fs.existsSync(dir)}));
   let git = {repository:false, identity:false, remote:false};
   try { const {execFileSync}=require('node:child_process'); git.repository=fs.existsSync(path.join(root,'.git')); git.identity=Boolean(execFileSync('git',['-C',root,'config','user.email'],{encoding:'utf8'}).trim()); git.remote=Boolean(execFileSync('git',['-C',root,'remote','get-url','origin'],{encoding:'utf8'}).trim()); } catch {}
-  return {ok:checks.every(x=>x.available)&&dirs.every(x=>x.present), checks, optional, directories:dirs, git, integrations:{avenox:'manual-export-only', serena:optional.find(x=>x.name==='uv')?.available?'uvx-ready':'not-installed', codex:optional.find(x=>x.name==='codex')?.available?'installed':'not-installed', claude:optional.find(x=>x.name==='claude')?.available?'installed':'not-installed', gemini:optional.find(x=>x.name==='gemini')?.available?'installed':'not-installed', hook_trust:'manual-review-required'}};
+  let connection=null,sync_state=null,pending={changes:0,deletions:0};
+  try{connection=JSON.parse(fs.readFileSync(path.join(root,'.teambrain','connection.json'),'utf8'));}catch{}
+  try{sync_state=JSON.parse(fs.readFileSync(path.join(root,'.teambrain','sync-state.json'),'utf8'));}catch{}
+  try{const {execFileSync}=require('node:child_process');const rows=execFileSync('git',['-C',root,'status','--porcelain','--','shared','teams'],{encoding:'utf8'}).split(/\r?\n/).filter(Boolean);pending={changes:rows.length,deletions:rows.filter(line=>line[0]==='D'||line[1]==='D').length};}catch{}
+  const delivery={configured:Boolean(connection),automatic:connection?.auto_sync===true,state:sync_state?.state||'unknown',verified_remote:sync_state?.verified_remote===true,pending};
+  return {ok:checks.every(x=>x.available)&&dirs.every(x=>x.present)&&(!connection||git.repository&&git.identity&&git.remote), checks, optional, directories:dirs, git, delivery, integrations:{avenox:'manual-export-only', serena:optional.find(x=>x.name==='uv')?.available?'uvx-ready':'not-installed', codex:optional.find(x=>x.name==='codex')?.available?'installed':'not-installed', claude:optional.find(x=>x.name==='claude')?.available?'installed':'not-installed', gemini:optional.find(x=>x.name==='gemini')?.available?'installed':'not-installed', hook_trust:'manual-review-required'}};
 }
-function configureSync(root, enabled) {
+function configureSync(root, enabled, options={}) {
   const file=path.join(path.resolve(root),'.teambrain','connection.json');
   if(!fs.existsSync(file)) throw new Error('TeamBrain connection is not configured.');
   const connection=JSON.parse(fs.readFileSync(file,'utf8'));
+  if(enabled===true) {
+    const {execFileSync}=require('node:child_process'), target=path.resolve(root), run=args=>execFileSync('git',['-C',target,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:15000}).trim();
+    if(!fs.existsSync(path.join(target,'.git'))) throw new Error('Automatic sync requires a Git memory repository.');
+    if(!run(['config','user.email'])) throw new Error('Automatic sync requires a Git user.email identity.');
+    if(!run(['remote','get-url','origin'])) throw new Error('Automatic sync requires an origin remote.');
+    if(!run(['branch','--show-current'])) throw new Error('Automatic sync cannot be enabled on a detached HEAD.');
+    execFileSync('git',['-C',target,'ls-remote','--exit-code','origin','HEAD'],{stdio:'ignore',timeout:15000});
+    const changes=run(['status','--porcelain','--','shared','teams']).split(/\r?\n/).filter(Boolean),deletions=changes.filter(line=>line[0]==='D'||line[1]==='D');
+    if(deletions.length&&options.reviewed!==true) throw new Error(`Automatic sync found ${deletions.length} deletion(s). Review them and rerun with --reviewed true.`);
+  }
   connection.auto_sync=enabled===true;
   connection.sync=enabled===true?'background':'manual';
   writeJsonAtomic(file,connection);
-  return {configured:true,auto_sync:connection.auto_sync,sync:connection.sync,file};
+  return {configured:true,auto_sync:connection.auto_sync,sync:connection.sync,file,reviewed:enabled===true?options.reviewed===true:undefined};
 }
 function writeJsonExclusive(file, value) { fs.mkdirSync(path.dirname(file),{recursive:true}); fs.writeFileSync(file, JSON.stringify(value,null,2)+'\n',{flag:'wx'}); return file; }
 function publish(root, options) {

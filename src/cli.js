@@ -11,6 +11,8 @@ const onboarding = require('./setup');
 const repos = require('./repo-registry');
 const { Workspace } = require('./workspace');
 const codexCapture = require('./codex-capture');
+const { SyncWorker } = require('./sync-worker');
+const repair = require('./repair');
 function parse(args) { const options = {}; const positional = []; for (let i=0;i<args.length;i++) { if (args[i].startsWith('--')) { const key=args[i].slice(2); const next=args[i+1]; options[key] = next && !next.startsWith('--') ? args[++i] : true; } else positional.push(args[i]); } return { positional, options }; }
 function root(options) { return path.resolve(options.root || process.cwd()); }
 function print(rows) { console.log(JSON.stringify(rows, null, 2)); }
@@ -37,12 +39,13 @@ async function run(args) {
   if (command === 'install codex-hook') { print(codexCapture.installCodexHook(options)); return; }
   if (command === 'session start') { print(await agentSession.startSession(options)); return; }
   if (command === 'session finish') { print(await agentSession.finishSession(options)); return; }
+  if (command === 'repair reassign-events') { print(repair.reassignGitEvents({...options,root:workspace})); return; }
   if (command === 'repo add') { print(await repos.add(options.workspace || process.cwd(), options.url, options.actor)); return; }
   if (command === 'repo list') { print(repos.list(options.workspace || process.cwd())); return; }
   if (command === 'repo refresh') { if(!options.id) throw new Error('repo refresh requires --id'); print(repos.refresh(options.workspace || process.cwd(), options.id)); return; }
   if (command === 'update' && options.check === true) { print({update_check:true,current_version:require('../package.json').version,avenox_target:'3.0.2',message:'No package is downloaded. Review release notes and checksum before updating.'}); return; }
   if (command === 'sync disable') { print(protocol.configureSync(workspace,false)); return; }
-  if (command === 'sync enable') { print(protocol.configureSync(workspace,true)); return; }
+  if (command === 'sync enable') { print(protocol.configureSync(workspace,true,{reviewed:options.reviewed===true||options.reviewed==='true'})); return; }
   if (command === 'sync') { print({mode:'automatic-when-approved', next_steps:['teambrain sync pull','teambrain sync push'], message:'Automatic sync is opt-in; dashboard, commit and agent-session flows may trigger it. Conflicts always require human resolution.'}); return; }
   if (command === 'dashboard' || command === 'serve') {
     const { createDashboardServer } = require('./dashboard-server');
@@ -66,9 +69,9 @@ async function run(args) {
   if (command === 'why') { if (options.event) { print(eventChain(db, options.event)); return; } if (!options.query) throw new Error('why requires --query or --event'); print(why(db, options.query)); return; }
   if (command === 'daily generate') { const date = options.date || new Date().toISOString().slice(0, 10); const file = writeDailyView(cwd, date, dailySummary(db, date)); print({ generated: true, canonical: false, file }); return; }
   if (command === 'reindex') { clearIndex(db); let indexed = 0; const invalid = []; for (const file of listEventFiles(cwd)) { try { indexEvent(db, readEvent(file), file); indexed++; } catch (error) { invalid.push({ file, error: error.message }); } } print({ indexed, invalid }); if (invalid.length) process.exitCode = 2; return; }
-  if (command === 'sync status') { print(await new MemorySync(cwd).status()); return; }
+  if (command === 'sync status') { print(new SyncWorker(workspace).status()); return; }
   if (command === 'sync pull') { print(await new MemorySync(cwd).pull()); return; }
   if (command === 'sync push') { print(await new MemorySync(cwd).push()); return; }
-  throw new Error('commands: setup, bootstrap, doctor, sync|sync enable|sync disable, context, tasks, repo add|list|refresh, connect github, connect project, capture commit|codex, install codex-hook, session start|finish, github create-memory, publish, handoff, update --check, init, team create|list, status, event create, timeline, why, daily generate, reindex, sync status|pull|push, serve');
+  throw new Error('commands: setup, bootstrap, doctor, sync|sync enable|sync disable, context, tasks, repo add|list|refresh, connect github, connect project, capture commit|codex, install codex-hook, session start|finish, repair reassign-events, github create-memory, publish, handoff, update --check, init, team create|list, status, event create, timeline, why, daily generate, reindex, sync status|pull|push, serve');
 }
 module.exports = { run };

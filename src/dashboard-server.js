@@ -47,6 +47,8 @@ function createDashboardServer(root) {
       }
       if (req.method === 'GET' && url.pathname === '/api/update') { send(200, await checkForUpdate()); return; }
       if (req.method === 'GET' && url.pathname === '/api/identity') { send(200, workspace.identity()); return; }
+      if (req.method === 'GET' && url.pathname === '/api/sync') { send(200, syncWorker.status()); return; }
+      if (req.method === 'GET' && url.pathname === '/api/health') { const sync=syncWorker.status(); send(sync.state==='attention-required'?503:200,{ok:sync.state!=='attention-required',identity:workspace.identity(),sync}); return; }
       if (url.pathname === '/api/teams') {
         if (req.method === 'GET') { send(200, workspace.teams()); return; }
         if (req.method === 'POST') { const input = await jsonBody(req); send(201, await withSync(workspace.createTeam(input.name, input.github_url, { local_only: input.local_only === 'true' || input.local_only === true }))); return; }

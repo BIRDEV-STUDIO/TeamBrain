@@ -36,9 +36,13 @@ function instructionBlock(options) {
   const base=`"${node}" --experimental-sqlite "${script}"`;
   return `<!-- teambrain:managed:start -->\n# TeamBrain shared context\n\nAt the start of every coding session, run and use the compact approved context and assigned tasks returned by:\n\n\`${base} session start --root "${root}" --team ${options.team} --project ${options.project} --actor ${actor}\`\n\nAfter a meaningful verified outcome, before the final response, record one concise durable summary with concrete sources:\n\n\`${base} session finish --root "${root}" --team ${options.team} --project ${options.project} --actor ${actor} --title "SHORT TITLE" --summary "VERIFIED OUTCOME" --sources "commit:SHA,file:path" --privacy-reviewed true\`\n\nDo not record raw prompts, chat transcripts, secrets, credentials, personal data, temporary logs, guesses, or facts that are obvious from one code read. Git commits are captured separately by the installed post-commit hook.\n<!-- teambrain:managed:end -->`;
 }
-function installInstructions(options) {
-  const repo=path.resolve(options.repo||process.cwd()); const file=path.join(repo,'AGENTS.md'); const block=instructionBlock(options); const start='<!-- teambrain:managed:start -->', end='<!-- teambrain:managed:end -->'; let current=fs.existsSync(file)?fs.readFileSync(file,'utf8'):'';
+function installManagedFile(file,block) {
+  const start='<!-- teambrain:managed:start -->', end='<!-- teambrain:managed:end -->'; let current=fs.existsSync(file)?fs.readFileSync(file,'utf8'):'';
   const a=current.indexOf(start), b=current.indexOf(end); if(a>=0&&b>=a) current=current.slice(0,a)+block+current.slice(b+end.length); else current=`${current.trim()}${current.trim()?'\n\n':''}${block}\n`;
-  fs.writeFileSync(file,current.endsWith('\n')?current:`${current}\n`); return {installed:true,file};
+  fs.writeFileSync(file,current.endsWith('\n')?current:`${current}\n`); return file;
+}
+function installInstructions(options) {
+  const repo=path.resolve(options.repo||process.cwd()),block=instructionBlock(options),file=installManagedFile(path.join(repo,'AGENTS.md'),block),claudeFile=installManagedFile(path.join(repo,'CLAUDE.md'),block);
+  return {installed:true,file,claude_file:claudeFile};
 }
 module.exports={approvedContext,startSession,finishSession,installInstructions,instructionBlock};

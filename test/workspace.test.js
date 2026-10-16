@@ -170,6 +170,11 @@ test('dashboard HTTP onboarding, input checks, security headers and cross-origin
     const identity = await (await fetch(base + '/api/identity')).json();
     assert.ok(identity.actor);
     assert.ok(identity.aliases.includes(identity.actor));
+    const healthResponse = await fetch(base + '/api/health'), health = await healthResponse.json();
+    assert.equal(healthResponse.status, 200);
+    assert.equal(health.ok, true);
+    assert.equal(health.sync.enabled, false);
+    assert.equal((await fetch(base + '/api/sync')).status, 200);
     assert.equal((await post('/api/teams', { name: 'Bad' }, { Origin: 'https://evil.example' })).status, 403);
     const hostStatus = await new Promise((resolve, reject) => {
       require('node:http').get(base + '/api/teams', { headers: { Host: 'evil.example' } }, res => { res.resume(); resolve(res.statusCode); }).on('error', reject);

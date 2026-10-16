@@ -35,7 +35,12 @@ a prompt event can recover the baseline when a client misses session start. Revi
 and trust the new hook once with `/hooks`, then start the dashboard with
 `Start-TeamBrain.cmd`. Each Codex working directory is created as a separate
 project under **Kişisel Projeler**. The hook stores changed paths and repository
-metadata only; it does not copy prompts, transcripts, patches, or file contents.
+metadata only. Re-running the reviewed setup updates a stale managed Git hook target,
+verifies the exact code and memory remotes, checks the actor identity, installs the
+managed `AGENTS.md` and `CLAUDE.md` blocks, and enables automatic sync only after all checks pass.
+Existing memory-repository changes must be reviewed first; setup refuses to enable
+automatic sync over a dirty pre-existing memory checkout.
+It does not copy prompts, transcripts, patches, or file contents.
 The personal project tree is excluded from Git even if the memory directory later
 becomes a repository. If that memory checkout already has a connection file, run
 `node --experimental-sqlite bin\teambrain.js sync disable --root C:\TeamBrain-memory`

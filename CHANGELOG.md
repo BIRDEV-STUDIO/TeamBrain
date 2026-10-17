@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 — 2026-10-18
+
+- Added a release-page redirect fallback so update checks continue to work when GitHub's unauthenticated API rate limit is exhausted.
+
 ## 0.6.0 — 2026-10-18
 
 - Added a workspace-wide Kasa and a causal, zoomable knowledge tree without changing canonical project records.

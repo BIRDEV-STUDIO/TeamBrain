@@ -5,8 +5,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { isNewer } = require('../src/update-check');
-const { applyRelease, inspectInstallation, isOfficialRemote, readSettings, writeSettings } = require('../src/updater');
+const { checkForUpdate, isNewer } = require('../src/update-check');
+const { applyRelease, dirtyApplicationFiles, inspectInstallation, isOfficialRemote, readSettings, writeSettings } = require('../src/updater');
 const { createDashboardServer } = require('../src/dashboard-server');
 
 test('semantic update comparison handles stable and prerelease versions', () => {
@@ -16,10 +16,21 @@ test('semantic update comparison handles stable and prerelease versions', () => 
   assert.equal(isNewer('0.6.0', '0.5.9'), true);
 });
 
+test('update checks accept a published release response without authentication', async () => {
+  const result = await checkForUpdate({ current: '0.6.0', requestLatest: async () => ({ tag_name: 'v0.6.1', name: 'TeamBrain 0.6.1', html_url: 'https://github.com/BIRDEV-STUDIO/TeamBrain/releases/tag/v0.6.1' }) });
+  assert.equal(result.available, true);
+  assert.equal(result.latest, '0.6.1');
+  assert.equal(result.tag, 'v0.6.1');
+});
+
 test('only the official TeamBrain GitHub remote is eligible for automatic updates', () => {
   assert.equal(isOfficialRemote('https://github.com/BIRDEV-STUDIO/TeamBrain.git'), true);
   assert.equal(isOfficialRemote('git@github.com:BIRDEV-STUDIO/TeamBrain.git'), true);
   assert.equal(isOfficialRemote('https://github.com/example/TeamBrain.git'), false);
+});
+
+test('local AI instruction files do not block safe application updates', () => {
+  assert.deepEqual(dirtyApplicationFiles(' M AGENTS.md\n?? CLAUDE.md\n M src/cli.js\n'), ['src/cli.js']);
 });
 
 test('release application requires a clean main checkout and uses fast-forward only', () => {

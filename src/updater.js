@@ -19,15 +19,20 @@ function normalizeRemote(value) {
 }
 function isOfficialRemote(value) { return normalizeRemote(value) === 'https://github.com/birdev-studio/teambrain'; }
 function runGit(appRoot, args) { return execFileSync('git', ['-C', appRoot, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60000 }).trim(); }
+const PERSONAL_INSTRUCTION_FILES = new Set(['AGENTS.md', 'CLAUDE.md', 'GEMINI.md', '.github/copilot-instructions.md', '.cursor/rules/teambrain.mdc']);
+function dirtyApplicationFiles(output) {
+  return String(output || '').split(/\r?\n/).filter(Boolean).map(line => line.slice(3).replace(/^"|"$/g, '').replace(/\\/g, '/')).filter(file => !PERSONAL_INSTRUCTION_FILES.has(file));
+}
 function inspectInstallation(appRoot = APP_ROOT, runner = runGit) {
   if (!fs.existsSync(path.join(appRoot, '.git'))) return { supported: false, reason: 'Bu TeamBrain kurulumu bir Git checkout’u değil; sürümü yayın sayfasından güncelleyin.', app_root: appRoot, disk_version: diskVersion(appRoot) };
   try {
     const remote = runner(appRoot, ['config', '--get', 'remote.origin.url']);
     const branch = runner(appRoot, ['branch', '--show-current']);
-    const dirty = Boolean(runner(appRoot, ['status', '--porcelain']));
+    const dirtyFiles = dirtyApplicationFiles(runner(appRoot, ['status', '--porcelain', '--untracked-files=all']));
+    const dirty = dirtyFiles.length > 0;
     if (!isOfficialRemote(remote)) return { supported: false, reason: 'Otomatik güncelleme yalnızca resmi BIRDEV-STUDIO/TeamBrain remote’u için kullanılabilir.', app_root: appRoot, remote, branch, dirty, disk_version: diskVersion(appRoot) };
     if (branch !== 'main') return { supported: false, reason: 'Otomatik güncelleme için TeamBrain checkout’u main dalında olmalı.', app_root: appRoot, remote, branch, dirty, disk_version: diskVersion(appRoot) };
-    return { supported: true, app_root: appRoot, remote, branch, dirty, disk_version: diskVersion(appRoot) };
+    return { supported: true, app_root: appRoot, remote, branch, dirty, dirty_files: dirtyFiles, disk_version: diskVersion(appRoot) };
   } catch (error) { return { supported: false, reason: `Git kurulumu doğrulanamadı: ${error.message}`, app_root: appRoot, disk_version: diskVersion(appRoot) }; }
 }
 function readSettings(memoryRoot) {
@@ -93,4 +98,4 @@ class UpdateService {
   stop() { clearInterval(this.timer); clearTimeout(this.initialTimer); }
 }
 
-module.exports = { UpdateService, applyRelease, inspectInstallation, isOfficialRemote, normalizeRemote, readSettings, writeSettings, diskVersion, RUNNING_VERSION };
+module.exports = { UpdateService, applyRelease, dirtyApplicationFiles, inspectInstallation, isOfficialRemote, normalizeRemote, readSettings, writeSettings, diskVersion, RUNNING_VERSION };

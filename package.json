@@ -1,6 +1,6 @@
 {
   "name": "teambrain",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "description": "Local-first, Git-backed team memory",
   "type": "commonjs",

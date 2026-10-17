@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 const { checkForUpdate, isNewer } = require('../src/update-check');
 const { applyRelease, dirtyApplicationFiles, inspectInstallation, isOfficialRemote, readSettings, writeSettings } = require('../src/updater');
 const { createDashboardServer } = require('../src/dashboard-server');
@@ -31,6 +32,23 @@ test('only the official TeamBrain GitHub remote is eligible for automatic update
 
 test('local AI instruction files do not block safe application updates', () => {
   assert.deepEqual(dirtyApplicationFiles(' M AGENTS.md\n?? CLAUDE.md\n M src/cli.js\n'), ['src/cli.js']);
+});
+
+test('official checkout remains updateable with local AGENTS and Claude instructions', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-update-local-instructions-'));
+  const git = (...args) => execFileSync('git', ['-C', root, ...args], { stdio: 'ignore' });
+  try {
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ version: '0.6.2' }));
+    fs.writeFileSync(path.join(root, 'AGENTS.md'), '# Shared rules\n');
+    git('init', '-b', 'main'); git('config', 'user.email', 'test@example.com'); git('config', 'user.name', 'Test');
+    git('remote', 'add', 'origin', 'https://github.com/BIRDEV-STUDIO/TeamBrain.git'); git('add', '.'); git('commit', '-m', 'initial');
+    fs.appendFileSync(path.join(root, 'AGENTS.md'), '\n# Private local integration\n');
+    fs.writeFileSync(path.join(root, 'CLAUDE.md'), '# Private local instructions\n');
+    const result = inspectInstallation(root);
+    assert.equal(result.supported, true);
+    assert.equal(result.dirty, false);
+    assert.deepEqual(result.dirty_files, []);
+  } finally { fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });
 
 test('release application requires a clean main checkout and uses fast-forward only', () => {

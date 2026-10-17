@@ -18,7 +18,10 @@ function normalizeRemote(value) {
   return String(value || '').trim().replace(/^git@github\.com:/i, 'https://github.com/').replace(/^ssh:\/\/git@github\.com\//i, 'https://github.com/').replace(/\.git\/?$/i, '').replace(/\/$/, '').toLowerCase();
 }
 function isOfficialRemote(value) { return normalizeRemote(value) === 'https://github.com/birdev-studio/teambrain'; }
-function runGit(appRoot, args) { return execFileSync('git', ['-C', appRoot, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60000 }).trim(); }
+function runGit(appRoot, args) {
+  const output = execFileSync('git', ['-C', appRoot, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60000 });
+  return args[0] === 'status' ? output.replace(/[\r\n]+$/, '') : output.trim();
+}
 const PERSONAL_INSTRUCTION_FILES = new Set(['AGENTS.md', 'CLAUDE.md', 'GEMINI.md', '.github/copilot-instructions.md', '.cursor/rules/teambrain.mdc']);
 function dirtyApplicationFiles(output) {
   return String(output || '').split(/\r?\n/).filter(Boolean).map(line => line.slice(3).replace(/^"|"$/g, '').replace(/\\/g, '/')).filter(file => !PERSONAL_INSTRUCTION_FILES.has(file));

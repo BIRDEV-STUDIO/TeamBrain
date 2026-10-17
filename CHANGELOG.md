@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.2 — 2026-10-18
+
+- Preserve Git porcelain status spacing so local managed AI instruction files are correctly excluded from application update checks.
+
 ## 0.6.1 — 2026-10-18
 
 - Added a release-page redirect fallback so update checks continue to work when GitHub's unauthenticated API rate limit is exhausted.

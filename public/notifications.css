@@ -31,6 +31,18 @@ nav button.active.has-unread::after{background:#285d4b;color:#fff}
 :root.dark .notification-item.important{background:#30452f;border-color:#526c48}
 @media(max-width:700px){.notifications-panel{position:fixed;top:62px;right:10px;left:10px;width:auto;max-height:calc(100vh - 74px)}.notifications-list{max-height:calc(100vh - 190px)}}
 
+/* Windows-style update state: visible without interrupting local work. */
+.update-notice.attention{border-color:#e4a52d;background:linear-gradient(110deg,#fff2c8,#ffe19a);color:#583b00;box-shadow:0 10px 30px #d9971d2b}
+.update-notice.installed{border-color:#5b91e1;background:linear-gradient(110deg,#eaf3ff,#cfe3ff);color:#173e72;box-shadow:0 10px 30px #3579cf25}
+.update-notice .update-action{padding:7px 10px;border:1px solid currentColor;border-radius:7px;font-size:10px;font-weight:800;background:rgba(255,255,255,.55)}
+:root.dark .update-notice.attention{background:linear-gradient(110deg,#5a451a,#6f5319);color:#fff1c5;border-color:#b98a2d}
+:root.dark .update-notice.installed{background:linear-gradient(110deg,#263f61,#2e507c);color:#e4f0ff;border-color:#527fb9}
+.update-panel{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:12px 20px;margin-bottom:18px;border-left:4px solid var(--line)}
+.update-panel h3{margin:5px 0 6px;font-size:18px}.update-panel p{font-size:12px;max-width:760px}.update-panel.attention{border-left-color:#e4a52d;background:linear-gradient(110deg,#fffaf0,var(--paper))}.update-panel.installed{border-left-color:#5b91e1;background:linear-gradient(110deg,#f0f6ff,var(--paper))}.update-panel.current{border-left-color:#6b9b59}.update-panel.offline{border-left-color:#a4aaa5}
+.update-actions{grid-column:1/-1;display:flex;gap:9px;flex-wrap:wrap}.update-actions button{min-height:36px}
+:root.dark .update-panel.attention{background:linear-gradient(110deg,#44391f,var(--paper))}:root.dark .update-panel.installed{background:linear-gradient(110deg,#273c56,var(--paper))}
+@media(max-width:700px){.update-notice{align-items:flex-start;flex-direction:column}.update-panel{grid-template-columns:1fr}.update-panel>.badge{justify-self:start}.update-actions{grid-column:1}}
+
 /* Shared interaction feedback lives in an asset every dashboard version already serves. */
 .loading-dots{display:inline-flex;align-items:center;gap:4px;margin-left:8px;vertical-align:middle}
 .loading-dots i{display:block;width:5px;height:5px;border-radius:50%;background:currentColor;animation:loading-dot 1.05s infinite ease-in-out both}

@@ -28,6 +28,26 @@ function id(value) {
 function directories(root) {
   return fs.existsSync(root) ? fs.readdirSync(root, { withFileTypes: true }).filter(e => e.isDirectory() && !e.isSymbolicLink()).map(e => e.name) : [];
 }
+function sharedRecords(root) {
+  const base = path.join(root, 'shared'), records = [];
+  if (!fs.existsSync(base)) return records;
+  function visit(folder) {
+    for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) continue;
+      const target = path.join(folder, entry.name);
+      if (entry.isDirectory()) { visit(target); continue; }
+      if (!entry.isFile() || !/\.(?:md|json)$/i.test(entry.name)) continue;
+      try {
+        const stat = fs.statSync(target), raw = fs.readFileSync(target, 'utf8'), relative = path.relative(root, target).replace(/\\/g, '/');
+        let title = entry.name.replace(/\.(?:md|json)$/i, ''), body = raw;
+        if (/\.md$/i.test(entry.name)) title = raw.match(/^#\s+(.+)$/m)?.[1]?.trim() || title;
+        else { try { const parsed = JSON.parse(raw); title = parsed.title || parsed.summary || parsed.receipt_id || title; body = parsed.summary || parsed.body || raw; } catch {} }
+        records.push({ path: relative, title, body: body.slice(0, 100000), truncated: body.length > 100000, updated_at: stat.mtime.toISOString() });
+      } catch {}
+    }
+  }
+  visit(base); return records;
+}
 function reconcileIndex(root, config, db) {
   const indexed = new Map(db.prepare('SELECT event_id, event_path FROM events').all().map(row => [row.event_id, row.event_path]));
   const canonical = new Map();
@@ -140,7 +160,7 @@ class Workspace {
       ? `node --experimental-sqlite "${cliPath}" setup --repo "${codePlaceholder}" --url "${memoryRemote}" --memory-root "${memoryRoot}" --team-name "${selected.name}" --project-name "${project.name}"`
       : 'Önce özel TeamBrain-memory GitHub reposunu Bağlantılar bölümünden bağlayın.';
     const agentPrompt = memoryRemote
-      ? `Bu kod reposuna TeamBrain kur. TeamBrain uygulaması şu klasörde hazır: ${path.resolve(__dirname, '..')}. Önce üzerinde çalıştığın kod reposunun tam yerel yolunu doğrula. TeamBrain hafıza reposu olarak yalnızca şu kesin URL'yi kullan: ${memoryRemote}. Hafıza hedefi: ${this.root}. Ekip: ${selected.name}. Proje: ${project.name}. Kararlı TeamBrain actor kimliğini GitHub kullanıcı girişinden doğrula; kişiyi e-posta veya görünen addan tahmin etme. Otomatik senkron, başlangıç ayarı, ekip ve proje seçimlerini kullanıcıyla birlikte tamamla. Herhangi bir repo klonlamadan, hook kurmadan, AGENTS.md dosyasını değiştirmeden veya bağlantı dosyası yazmadan önce tüm son seçimleri kullanıcıya göster ve onaylat. Ardından TeamBrain'in etkileşimli setup sihirbazını bu kod reposunun kesin yerel yolu ile çalıştır, kurulumu doğrula ve sonucu özetle. Repo URL'sini tahmin etme, değiştirme veya başka bir repo ile ikame etme.`
+      ? `Bu kod reposuna TeamBrain kur. TeamBrain uygulaması şu klasörde hazır: ${path.resolve(__dirname, '..')}. Önce üzerinde çalıştığın kod reposunun tam yerel yolunu doğrula. TeamBrain hafıza reposu olarak yalnızca şu kesin URL'yi kullan: ${memoryRemote}. Hafıza hedefi: ${this.root}. Ekip: ${selected.name}. Proje: ${project.name}. Kararlı TeamBrain actor kimliğini GitHub kullanıcı girişinden doğrula; kişiyi e-posta veya görünen addan tahmin etme. Kullanıcıya Codex/ChatGPT masaüstü, Claude, Gemini, GitHub Copilot, Cursor veya başka hangi AI araçlarını kullandığını sor; birden fazla seçim yapabilsin. Otomatik senkron, başlangıç ayarı, AI araçları, ekip ve proje seçimlerini kullanıcıyla birlikte tamamla. Herhangi bir repo klonlamadan, hook kurmadan, AI talimat dosyalarını değiştirmeden veya bağlantı dosyası yazmadan önce tüm son seçimleri kullanıcıya göster ve onaylat. Ardından TeamBrain'in etkileşimli setup sihirbazını bu kod reposunun kesin yerel yolu ile çalıştır, kurulumu doğrula ve sonucu özetle. Repo URL'sini tahmin etme, değiştirme veya başka bir repo ile ikame etme.`
       : 'Önce kullanıcıdan kesin özel TeamBrain-memory GitHub repo URL’sini iste; URL’yi tahmin etme veya ikame etme. Ardından son kurulum seçimlerini kullanıcıya gösterip onay aldıktan sonra TeamBrain setup sihirbazını çalıştır.';
     return { team: { id: selected.id, name: selected.name }, memory_repository: memoryRemote || null, project, command, agent_prompt: agentPrompt, steps: ['Kod reposunu bilgisayarınıza klonlayın.', 'Terminali kod reposunun klasöründe açın.', 'Aşağıdaki komutu çalıştırın ve sorulara cevap verin.', 'Kurulum sonunda bir commit yapın; TeamBrain değişiklik kaydını otomatik oluşturup hafızaya gönderir.'] };
   }
@@ -183,6 +203,55 @@ class Workspace {
         members: selectedTeam?.members || [], documents: listDocuments(root)
       };
     });
+  }
+  vault() {
+    const teams = this.teams();
+    return {
+      generated_at: new Date().toISOString(),
+      shared: sharedRecords(this.root),
+      teams: teams.map(team => ({
+        id: team.id,
+        name: team.name,
+        local_only: team.local_only,
+        members: team.members,
+        chat: this.teamChatSnapshot(team.id),
+        projects: team.projects.map(project => {
+          try {
+            return { ...this.snapshot(team.id, project.id), source_root: project.source_root || null };
+          } catch (error) {
+            return { project: { id: project.id, name: project.name }, events: [], documents: [], planner: { calendar: [], tasks: [] }, total: 0, error: error.message };
+          }
+        })
+      }))
+    };
+  }
+  notifications() {
+    return {
+      generated_at: new Date().toISOString(),
+      teams: this.teams().map(team => ({
+        id: team.id,
+        name: team.name,
+        members: team.members,
+        chat: this.teamChatSnapshot(team.id),
+        projects: team.projects.map(project => {
+          try {
+            return this.withProject(team.id, project.id, ({ root, config, db }) => {
+              reconcileIndex(root, config, db);
+              const chat = migrateLegacyChat(root, db).messages;
+              const events = [...timeline(db, 1000), ...chat].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 1000);
+              return {
+                project: { id: project.id, name: config.project_name || config.project_id },
+                actor: config.actor_id,
+                events: events.map(event => ({ event_id: event.event_id, event_type: event.event_type, title: event.title, actor_id: event.actor_id, created_at: event.created_at })),
+                planner: planner(root)
+              };
+            });
+          } catch (error) {
+            return { project: { id: project.id, name: project.name }, events: [], planner: { calendar: [], tasks: [] }, error: error.message };
+          }
+        })
+      }))
+    };
   }
   connection(root) {
     let cursor = path.resolve(root), connectionFile = null;

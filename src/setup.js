@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'); const path=require('node:path'); const os=require('node:os'); const {execFileSync}=require('node:child_process'); const readline=require('node:readline/promises');
-const protocol=require('./protocol'); const {Workspace}=require('./workspace'); const automation=require('./automation'); const {installInstructions}=require('./agent-session'); const {writeJsonAtomic}=require('./atomic-file');
+const protocol=require('./protocol'); const {Workspace}=require('./workspace'); const automation=require('./automation'); const {installInstructions,instructionPlan}=require('./agent-session'); const {writeJsonAtomic}=require('./atomic-file');
 
 function git(repo,args) { return execFileSync('git',['-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim(); }
 function githubIdentity() { try{return execFileSync('gh',['api','user','--jq','.login'],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();}catch{return process.env.USERNAME||process.env.USER||'unknown';} }
@@ -23,13 +23,20 @@ async function setup(options={},dependencies={}) {
     const codeRepo=path.resolve(options.repo||process.cwd()); if(!fs.existsSync(path.join(codeRepo,'.git'))) throw new Error('setup requires --repo pointing to a Git working tree');
     const codeRemote=git(codeRepo,['remote','get-url','origin']);
     let memoryUrl=options.url, memoryRoot=options['memory-root']||(process.platform==='win32'?'C:\\TeamBrain-memory':path.join(os.homedir(),'teambrain-memory')), actor=options.actor||githubIdentity();
-    if(interactive) { memoryUrl=memoryUrl||await prompt(rl,'Exact private GitHub memory repository URL'); memoryRoot=await prompt(rl,'Local memory directory',memoryRoot); actor=await prompt(rl,'Stable GitHub login / TeamBrain actor',actor); }
+    let aiTools=options['ai-tools']; let aiInstructionFiles=options['ai-instruction-files'];
+    if(interactive) {
+      memoryUrl=memoryUrl||await prompt(rl,'Exact private GitHub memory repository URL'); memoryRoot=await prompt(rl,'Local memory directory',memoryRoot); actor=await prompt(rl,'Stable GitHub login / TeamBrain actor',actor);
+      aiTools=await prompt(rl,'AI tools used, comma-separated (codex, chatgpt, claude, gemini, copilot, cursor, other)',aiTools||'codex,chatgpt');
+      if(String(aiTools).split(',').map(value=>value.trim().toLowerCase()).includes('other')) aiInstructionFiles=await prompt(rl,'Other AI instruction file path(s), repository-relative and comma-separated',aiInstructionFiles||'');
+    }
     if(!memoryUrl) throw new Error('setup requires the exact private memory repository --url');
     actor=validActor(actor); if(!probe(codeRemote)) throw new Error(`Code repository remote is not reachable with current Git credentials: ${codeRemote}`);
     const autoSync=options['auto-sync']===undefined?(interactive?yes(await prompt(rl,'Enable automatic memory synchronization? (e/h)','e')):true):yes(options['auto-sync']);
     const startup=options.startup===undefined?(interactive?yes(await prompt(rl,'Start TeamBrain automatically with Windows? (e/h)','e')):false):yes(options.startup);
     const teamName=options['team-name']||(interactive?await prompt(rl,'Team name',repoName(codeRemote)):repoName(codeRemote)); const projectName=options['project-name']||(interactive?await prompt(rl,'Project name',repoName(codeRemote)):repoName(codeRemote));
-    const summary={memory_repository:memoryUrl,memory_directory:path.resolve(memoryRoot),actor,automatic_sync:autoSync,windows_startup:startup,code_repository:codeRepo,code_remote:codeRemote,team:teamName,project:projectName,changes:['connect/verify the private memory repository','install a reviewed Git post-commit hook','install managed AGENTS.md and CLAUDE.md blocks','optionally install a Windows startup launcher']};
+    const requestedAiTools=aiTools||'codex,claude';
+    const aiPlan=instructionPlan({repo:codeRepo,'ai-tools':requestedAiTools,'ai-instruction-files':aiInstructionFiles});
+    const summary={memory_repository:memoryUrl,memory_directory:path.resolve(memoryRoot),actor,ai_tools:aiPlan.tools,ai_instruction_files:aiPlan.files.map(file=>path.relative(codeRepo,file)),automatic_sync:autoSync,windows_startup:startup,code_repository:codeRepo,code_remote:codeRemote,team:teamName,project:projectName,changes:['connect/verify the private memory repository','install a reviewed, AI-independent Git post-commit hook','install managed instructions for every selected AI tool','optionally install a Windows startup launcher']};
     if(interactive) { console.log(`\nFinal setup choices:\n${JSON.stringify(summary,null,2)}`); if(!yes(await prompt(rl,'Apply these choices? (e/h)','h'),false)) throw new Error('Setup cancelled.'); }
     else if(options.yes!==true&&options.yes!=='true') throw new Error('Non-interactive setup requires --yes after reviewing all options.');
     const existingMemory=fs.existsSync(path.join(path.resolve(memoryRoot),'.git')); const beforeDirty=existingMemory?dirty(path.resolve(memoryRoot)):'';
@@ -41,9 +48,9 @@ async function setup(options={},dependencies={}) {
     const projectRoot=workspace.projectPath(team.id,project.id),sourceFile=path.join(projectRoot,'.teambrain','source.json'); let source={}; try{source=JSON.parse(fs.readFileSync(sourceFile,'utf8'));}catch{}
     if(source.remote&&canonical(source.remote)!==canonical(codeRemote)) throw new Error(`Project ${project.name} is already bound to a different repository: ${source.remote}`);
     writeJsonAtomic(sourceFile,{schema_version:1,kind:'git-repository',path:codeRepo,remote:codeRemote,connected_at:source.connected_at||new Date().toISOString()});
-    const integration={repo:codeRepo,'memory-root':memoryRoot,team:team.id,project:project.id,actor}; const hook=automation.installHook(integration); const instructions=installInstructions(integration); const autostart=startup?enableWindowsStartup(memoryRoot):{installed:false,reason:'not selected'};
+    const integration={repo:codeRepo,'memory-root':memoryRoot,team:team.id,project:project.id,actor,'ai-tools':requestedAiTools,'ai-instruction-files':aiInstructionFiles}; const hook=automation.installHook(integration); const instructions=installInstructions(integration); const autostart=startup?enableWindowsStartup(memoryRoot):{installed:false,reason:'not selected'};
     const sync=protocol.configureSync(memoryRoot,autoSync,{reviewed:true}); const hookText=fs.readFileSync(hook.file,'utf8'),instructionsText=fs.readFileSync(instructions.file,'utf8');
-    const checks={memory_remote:canonical(git(memoryRoot,['remote','get-url','origin']))===canonical(memoryUrl),code_remote:canonical(git(codeRepo,['remote','get-url','origin']))===canonical(codeRemote),target_exists:fs.existsSync(projectRoot),hook_target:hookText.includes(`--team "${team.id}" --project "${project.id}"`),managed_instructions:instructionsText.includes('teambrain:managed:start')&&fs.readFileSync(instructions.claude_file,'utf8').includes('teambrain:managed:start'),automatic_sync:sync.auto_sync===autoSync,remote_reachable:probe(memoryUrl),startup:!startup||autostart.installed};
+    const checks={memory_remote:canonical(git(memoryRoot,['remote','get-url','origin']))===canonical(memoryUrl),code_remote:canonical(git(codeRepo,['remote','get-url','origin']))===canonical(codeRemote),target_exists:fs.existsSync(projectRoot),hook_target:hookText.includes(`--team "${team.id}" --project "${project.id}"`),managed_instructions:instructions.files.length>0&&instructions.files.every(file=>fs.readFileSync(file,'utf8').includes('teambrain:managed:start')),automatic_sync:sync.auto_sync===autoSync,remote_reachable:probe(memoryUrl),startup:!startup||autostart.installed};
     const verified=Object.values(checks).every(Boolean); if(!verified) throw new Error(`Setup verification failed: ${JSON.stringify(checks)}`);
     return {installed:true,verified,checks,summary,team_id:team.id,project_id:project.id,hook,instructions,autostart,sync,next_steps:[`Start TeamBrain: ${path.resolve(__dirname,'..','Start-TeamBrain.cmd')}`,'Commit once in the code repository and verify that a Markdown event appears in the memory repository.']};
   } finally { rl?.close(); }

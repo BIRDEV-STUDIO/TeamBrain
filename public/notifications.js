@@ -16,7 +16,7 @@
     const repositoryInstruction = memoryRepository
       ? `TeamBrain hafıza reposu olarak yalnızca şu kesin URL'yi kullan: ${memoryRepository}.`
       : 'Kuruluma başlamadan önce kullanıcıdan kesin özel TeamBrain hafıza repo URL’sini iste; URL’yi tahmin etme veya başka bir repo ile ikame etme.';
-    return `Bu kod reposuna TeamBrain kur. Önce üzerinde çalıştığın kod reposunun tam yerel yolunu ve Git remote adresini doğrula. ${repositoryInstruction} Ekip: ${team}. Proje: ${project}. Kararlı TeamBrain actor kimliğini GitHub kullanıcı girişinden doğrula; kişiyi e-posta veya görünen addan tahmin etme. Otomatik senkron, başlangıç ayarı, ekip ve proje seçimlerini kullanıcıyla birlikte tamamla. Repo klonlamadan, hook kurmadan, AGENTS.md dosyasını değiştirmeden veya bağlantı dosyası yazmadan önce tüm son seçimleri kullanıcıya göster ve onaylat. Ardından TeamBrain kurulum sihirbazını çalıştır, kurulumu doğrula ve sonucu özetle.${command ? ` Kurulum komutu referansı: ${command}` : ''}`;
+    return `Bu kod reposuna TeamBrain kur. Önce üzerinde çalıştığın kod reposunun tam yerel yolunu ve Git remote adresini doğrula. ${repositoryInstruction} Ekip: ${team}. Proje: ${project}. Kararlı TeamBrain actor kimliğini GitHub kullanıcı girişinden doğrula; kişiyi e-posta veya görünen addan tahmin etme. Kullanıcıya Codex/ChatGPT masaüstü, Claude, Gemini, GitHub Copilot, Cursor veya başka hangi AI araçlarını kullandığını sor; birden fazla seçim yapabilsin. Otomatik senkron, başlangıç ayarı, AI araçları, ekip ve proje seçimlerini kullanıcıyla birlikte tamamla. Repo klonlamadan, hook kurmadan, AI talimat dosyalarını değiştirmeden veya bağlantı dosyası yazmadan önce tüm son seçimleri kullanıcıya göster ve onaylat. Ardından TeamBrain kurulum sihirbazını çalıştır, kurulumu doğrula ve sonucu özetle.${command ? ` Kurulum komutu referansı: ${command}` : ''}`;
   }
 
   class NotificationTracker {
@@ -70,6 +70,12 @@
     counts(scope) {
       const state = this.read(scope);
       return Object.fromEntries(Object.entries(state).map(([category, value]) => [category, Array.isArray(value?.unread) ? value.unread.length : 0]));
+    }
+    totalUnread(scopes = []) {
+      return [...new Set(scopes.filter(Boolean))].reduce((total, scope) => total + Object.values(this.counts(scope)).reduce((sum, count) => sum + count, 0), 0);
+    }
+    markSeenMany(scopes = [], categories = []) {
+      for (const scope of new Set(scopes.filter(Boolean))) for (const category of categories) this.markSeen(scope, category);
     }
   }
   return { NotificationTracker, buildAgentSetupPrompt };

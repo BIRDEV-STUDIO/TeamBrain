@@ -1,7 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const state = { teams: [], team: null, project: null, snapshot: null, syncHealth: null, teamChat: [], actors: [], memberRefresh: {}, chatScope: 'team', view: 'overview', calendarCursor: new Date(), selectedCalendarDate: null, notificationSection: 'general', updateInfo: null, query: '', type: '', mode: null, version: 0 };
+const state = { teams: [], team: null, project: null, snapshot: null, notificationWorkspace: null, syncHealth: null, teamChat: [], actors: [], memberRefresh: {}, chatScope: 'team', view: 'overview', calendarCursor: new Date(), selectedCalendarDate: null, treeExpanded: new Set(), treeInitializedProject: null, treeParent: null, treeScale: 1, notificationSection: 'general', updateInfo: null, query: '', type: '', vault: null, vaultEntries: [], vaultFilters: { team: '', project: '', kind: '', query: '' }, mode: null, version: 0 };
 const notificationTracker = new TeamBrainNotifications.NotificationTracker(localStorage);
 const names = {
   'note.created': 'Not',
@@ -14,7 +14,9 @@ const names = {
   'chat.message': 'Sohbet mesajı',
   'chat.reply.generated': 'Yerel yanıt'
 };
-const views = { overview: 'Genel bakış', projects: 'Projeler', team: 'Ekip', chat: 'Sohbet', activity: 'Aktivite', decisions: 'Karar defteri', calendar: 'Takvim', tasks: 'Görevler', daily: 'Günün özeti', integrations: 'Bağlantılar' };
+const views = { overview: 'Genel bakış', projects: 'Projeler', team: 'Ekip', chat: 'Sohbet', activity: 'Aktivite', tree: 'Bilgi ağacı', decisions: 'Karar defteri', calendar: 'Takvim', tasks: 'Görevler', vault: 'Kasa', integrations: 'Bağlantılar' };
+const initialParams = new URLSearchParams(location.search), requestedView = initialParams.get('view'), requestedTeam = initialParams.get('team'), requestedProject = initialParams.get('project');
+if (requestedView && views[requestedView]) state.view = requestedView;
 const date = value => new Date(value).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
 const time = value => new Date(value).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 const today = new Date().toLocaleDateString('tr-TR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
@@ -24,15 +26,49 @@ if (savedTheme === 'dark' || (!savedTheme && matchMedia('(prefers-color-scheme: 
 function updateThemeButton() { const dark=document.documentElement.classList.contains('dark'); $('theme-toggle').textContent=dark?'☾':'☀'; $('theme-toggle').setAttribute('aria-label',dark?'Açık moda geç':'Koyu moda geç'); }
 updateThemeButton();
 $('theme-toggle').addEventListener('click',()=>{const dark=document.documentElement.classList.toggle('dark'); localStorage.setItem('teambrain-theme',dark?'dark':'light'); updateThemeButton();});
-async function checkForUpdate() {
+function renderUpdateNotice(update) {
+  const notice = $('update-notice');
+  notice.className = 'update-notice';
+  if (update.restart_required) {
+    notice.classList.add('installed'); notice.hidden = false;
+    notice.innerHTML = `<span><strong>TeamBrain ${escape(update.current)} kuruldu.</strong> Yeni sürümü kullanmak için dashboard’u yeniden başlat.</span><span><button class="update-action" type="button" data-update-restart>Şimdi yeniden başlat</button></span>`;
+  } else if (update.available && localStorage.getItem('teambrain-dismissed-update') !== update.latest) {
+    notice.classList.add('attention'); notice.hidden = false;
+    const canApply = update.installation?.supported && !update.installation?.dirty;
+    notice.innerHTML = `<span>Yeni TeamBrain sürümü hazır: <strong>${escape(update.name || update.latest)}</strong> · Mevcut sürüm ${escape(update.current)}</span><span><a href="${escape(update.url)}" target="_blank" rel="noreferrer">Sürüm notları ↗</a>${canApply ? ' <button class="update-action" type="button" data-update-apply>Şimdi güncelle</button>' : ''} <button type="button" data-update-dismiss aria-label="Bildirimi kapat">×</button></span>`;
+  } else { notice.hidden = true; }
+  notice.querySelector('[data-update-dismiss]')?.addEventListener('click', () => { localStorage.setItem('teambrain-dismissed-update', update.latest); notice.hidden = true; renderNotificationCenter(); });
+  notice.querySelector('[data-update-apply]')?.addEventListener('click', event => applyAvailableUpdate(event.currentTarget));
+  notice.querySelector('[data-update-restart]')?.addEventListener('click', event => restartAfterUpdate(event.currentTarget));
+}
+async function checkForUpdate(manual = false) {
   try {
-    const update = await api('/api/update'); const notice = $('update-notice');
-    state.updateInfo = update.available ? update : null;
+    const update = await api(`/api/update${manual ? '?refresh=1' : ''}`, undefined, 'GET');
+    state.updateInfo = update;
     renderNotificationCenter();
-    if (!update.available || localStorage.getItem('teambrain-dismissed-update') === update.latest) { notice.hidden = true; return; }
-    notice.innerHTML = `<span>Yeni TeamBrain sürümü hazır: <strong>${escape(update.name || update.latest)}</strong> · Mevcut sürüm ${escape(update.current)}</span><span><a href="${escape(update.url)}" target="_blank" rel="noreferrer">Sürüm notlarını aç ↗</a> <button type="button" id="dismiss-update" aria-label="Bildirimi kapat">×</button></span>`;
-    notice.hidden = false; $('dismiss-update').onclick = () => { localStorage.setItem('teambrain-dismissed-update', update.latest); notice.hidden = true; renderNotificationCenter(); };
-  } catch {}
+    renderUpdateNotice(update);
+    if (state.view === 'integrations') renderConnections();
+    if (manual) toast(update.offline ? 'GitHub sürüm bilgisine ulaşılamadı.' : update.available ? `${update.latest} güncellemesi hazır.` : update.restart_required ? 'Güncelleme kurulu; yeniden başlatma gerekiyor.' : 'TeamBrain güncel.');
+    return update;
+  } catch (error) { if (manual) toast(error.message); return null; }
+}
+async function applyAvailableUpdate(button) {
+  setButtonBusy(button, true, 'Kuruluyor');
+  try { const update = await api('/api/update/apply', {}); state.updateInfo = update; renderUpdateNotice(update); renderNotificationCenter(); if (state.view === 'integrations') renderConnections(); toast(update.installed ? 'Güncelleme kuruldu. Yeniden başlatınca etkinleşecek.' : update.message || 'TeamBrain güncel.'); }
+  catch (error) { toast(error.message); await checkForUpdate(false); }
+  finally { setButtonBusy(button, false); }
+}
+async function restartAfterUpdate(button) {
+  setButtonBusy(button, true, 'Yeniden başlatılıyor');
+  try {
+    await api('/api/update/restart', {}); toast('Dashboard yeniden başlatılıyor…');
+    setTimeout(async function reconnect() { try { await fetch('/api/health', { cache: 'no-store' }); location.reload(); } catch { setTimeout(reconnect, 1000); } }, 1200);
+  } catch (error) { toast(error.message); setButtonBusy(button, false); }
+}
+async function setAutomaticUpdates(enabled, button) {
+  setButtonBusy(button, true, enabled ? 'Etkinleştiriliyor' : 'Kapatılıyor');
+  try { const update = await api('/api/update/settings', { automatic: enabled }); state.updateInfo = update; renderUpdateNotice(update); renderConnections(); toast(enabled ? 'Güvenli otomatik güncellemeler açıldı.' : 'Otomatik güncellemeler kapatıldı.'); }
+  catch (error) { toast(error.message); setButtonBusy(button, false); }
 }
 
 async function api(url, data, method = 'POST') {
@@ -81,6 +117,7 @@ function restoreSelection() {
     savedTeam = localStorage.getItem('teambrain-selected-team');
     savedProject = localStorage.getItem('teambrain-selected-project');
   } catch {}
+  if (requestedTeam && state.teams.some(item => item.id === requestedTeam)) state.team = requestedTeam;
   if (!team()) {
     state.team = state.teams.find(item => item.id === savedTeam)?.id
       || state.teams.find(item => item.projects?.length)?.id
@@ -88,6 +125,7 @@ function restoreSelection() {
       || null;
   }
   const projects = team()?.projects || [];
+  if (requestedProject && projects.some(project => project.id === requestedProject)) state.project = requestedProject;
   if (!projects.some(project => project.id === state.project)) {
     state.project = projects.find(project => project.id === savedProject)?.id || projects[0]?.id || null;
   }
@@ -96,30 +134,43 @@ function restoreSelection() {
 
 function teamNotificationScope() { return state.team ? `team:${state.team}` : null; }
 function projectNotificationScope() { return state.team && state.project ? `team:${state.team}:project:${state.project}` : null; }
-function ownActors() { return [...state.actors, state.snapshot?.actor, state.snapshot?.connection?.github?.actor_id].filter(Boolean); }
-function notificationItems() {
-  const currentTeam = team();
+function ownActors() {
+  const workspaceActors = (state.notificationWorkspace?.teams || []).flatMap(teamItem => (teamItem.projects || []).flatMap(projectItem => [projectItem.actor, projectItem.connection?.github?.actor_id]));
+  return [...state.actors, state.snapshot?.actor, state.snapshot?.connection?.github?.actor_id, ...workspaceActors].filter(Boolean);
+}
+function notificationContexts() {
   const baselineActor = ownActors()[0] || '__teambrain_self__';
-  const teamItems = [
-    { category: 'team', id: 'baseline:team', actor: baselineActor },
-    { category: 'chat', id: 'baseline:chat', actor: baselineActor },
-    ...(currentTeam?.members || []).map(member => ({ category: 'team', id: `member:${member.login}`, actor: member.login })),
-    ...state.teamChat.filter(event => event.event_type === 'chat.message').map(event => ({ category: 'chat', id: `team-chat:${event.event_id}`, actor: event.actor_id }))
-  ];
-  const projectItems = ['chat', 'activity', 'decisions', 'calendar', 'tasks'].map(category => ({ category, id: `baseline:${category}`, actor: baselineActor }));
-  projectItems.push(...events().filter(event => event.event_type !== 'chat.reply.generated').map(event => ({
-    category: event.event_type === 'chat.message' ? 'chat' : event.event_type.startsWith('decision.') ? 'decisions' : 'activity',
-    id: `event:${event.event_id}`,
-    actor: event.actor_id
-  })));
-  for (const item of state.snapshot?.planner?.calendar || []) projectItems.push({ category: 'calendar', id: `calendar:${item.id}`, actor: item.created_by });
-  for (const item of state.snapshot?.planner?.tasks || []) {
-    projectItems.push({ category: 'tasks', id: `task:${item.id}:created`, actor: item.created_by });
-    if (item.completed_at) projectItems.push({ category: 'tasks', id: `task:${item.id}:done:${item.completed_at}`, actor: item.completed_by });
+  const teams = [], projects = [];
+  for (const teamItem of state.notificationWorkspace?.teams || []) {
+    const teamItems = [
+      { category: 'team', id: 'baseline:team', actor: baselineActor },
+      { category: 'chat', id: 'baseline:chat', actor: baselineActor },
+      ...(teamItem.members || []).map(member => ({ category: 'team', id: `member:${member.login}`, actor: member.login })),
+      ...(teamItem.chat || []).filter(event => event.event_type === 'chat.message').map(event => ({ category: 'chat', id: `team-chat:${event.event_id}`, actor: event.actor_id }))
+    ];
+    teams.push({ team: teamItem, scope: `team:${teamItem.id}`, items: teamItems });
+    for (const projectItem of teamItem.projects || []) {
+      const projectItems = ['chat', 'activity', 'decisions', 'calendar', 'tasks'].map(category => ({ category, id: `baseline:${category}`, actor: baselineActor }));
+      projectItems.push(...(projectItem.events || []).filter(event => event.event_type !== 'chat.reply.generated').map(event => ({
+        category: event.event_type === 'chat.message' ? 'chat' : event.event_type.startsWith('decision.') ? 'decisions' : 'activity',
+        id: `event:${event.event_id}`,
+        actor: event.actor_id
+      })));
+      for (const item of projectItem.planner?.calendar || []) projectItems.push({ category: 'calendar', id: `calendar:${item.id}`, actor: item.created_by });
+      for (const item of projectItem.planner?.tasks || []) {
+        projectItems.push({ category: 'tasks', id: `task:${item.id}:created`, actor: item.created_by });
+        if (item.completed_at) projectItems.push({ category: 'tasks', id: `task:${item.id}:done:${item.completed_at}`, actor: item.completed_by });
+      }
+      projects.push({ team: teamItem, project: projectItem, scope: `team:${teamItem.id}:project:${projectItem.project.id}`, items: projectItems });
+    }
   }
-  return { teamItems, projectItems };
+  return { teams, projects };
 }
 function markViewSeen(view = state.view) {
+  if (view === 'chat') {
+    notificationTracker.markSeen(state.chatScope === 'team' ? teamNotificationScope() : projectNotificationScope(), view);
+    return;
+  }
   notificationTracker.markSeen(teamNotificationScope(), view);
   notificationTracker.markSeen(projectNotificationScope(), view);
 }
@@ -144,24 +195,36 @@ function renderNotificationLights() {
 }
 function setupSeenKey(teamId = state.team) { return `teambrain-setup-seen:${teamId || 'none'}`; }
 function notificationSectionCounts() {
-  const teamCounts = notificationTracker.counts(teamNotificationScope());
+  const contexts = notificationContexts();
   const projectCounts = notificationTracker.counts(projectNotificationScope());
-  const updateUnread = state.updateInfo && localStorage.getItem('teambrain-notification-update-seen') !== state.updateInfo.latest ? 1 : 0;
+  const updateUnread = state.updateInfo?.available && localStorage.getItem('teambrain-notification-update-seen') !== state.updateInfo.latest ? 1 : 0;
   const setupUnread = state.team && localStorage.getItem(setupSeenKey()) !== 'true' ? 1 : 0;
+  const globalUnread = notificationTracker.totalUnread([...contexts.teams, ...contexts.projects].map(context => context.scope));
   return {
-    general: Object.values(teamCounts).reduce((sum, count) => sum + count, 0) + updateUnread,
+    general: globalUnread + updateUnread,
     repo: Object.values(projectCounts).reduce((sum, count) => sum + count, 0) + setupUnread
   };
 }
 function notificationEmpty(text) { return `<div class="notification-empty">${escape(text)}</div>`; }
 function generalNotificationMarkup() {
   const items = [];
-  if (state.updateInfo) items.push(`<a class="notification-item important" href="${escape(state.updateInfo.url)}" target="_blank" rel="noreferrer"><strong>TeamBrain güncellemesi hazır</strong><span>${escape(state.updateInfo.name || state.updateInfo.latest)} sürüm notlarını aç.</span><small>GENEL · SÜRÜM</small></a>`);
-  const counts = notificationTracker.counts(teamNotificationScope());
-  if (counts.team) items.push(`<button class="notification-item" type="button" data-notification-view="team"><strong>Ekip bilgileri güncellendi</strong><span>${counts.team} yeni ekip veya üye değişikliği var.</span><small>GENEL · EKİP</small></button>`);
-  for (const message of state.teamChat.filter(item => item.event_type === 'chat.message').slice(-8).reverse()) {
-    items.push(`<button class="notification-item" type="button" data-notification-view="chat" data-notification-chat-scope="team"><strong>${escape(message.actor_id || 'Ekip üyesi')}</strong><span>${escape(String(message.body || '').slice(0, 150))}</span><small>GENEL · EKİP SOHBETİ · ${date(message.created_at)}</small></button>`);
+  if (state.updateInfo?.available) items.push(`<a class="notification-item important" href="${escape(state.updateInfo.url)}" target="_blank" rel="noreferrer"><strong>TeamBrain güncellemesi hazır</strong><span>${escape(state.updateInfo.name || state.updateInfo.latest)} sürüm notlarını aç.</span><small>GENEL · SÜRÜM</small></a>`);
+  const contexts = notificationContexts(), activity = [];
+  for (const context of contexts.teams) {
+    const counts = notificationTracker.counts(context.scope);
+    if (counts.team) activity.push({ teamId: context.team.id, view: 'team', title: `${context.team.name} ekibi güncellendi`, text: `${counts.team} yeni ekip veya üye değişikliği var.`, label: 'EKİP', at: '' });
+    for (const message of (context.team.chat || []).filter(item => item.event_type === 'chat.message')) activity.push({ teamId: context.team.id, view: 'chat', chatScope: 'team', title: message.actor_id || 'Ekip üyesi', text: String(message.body || '').slice(0, 150), label: `${context.team.name} · EKİP SOHBETİ`, at: message.created_at });
   }
+  for (const context of contexts.projects) {
+    const projectName = context.project.project.name, teamName = context.team.name;
+    for (const event of (context.project.events || []).filter(item => item.event_type !== 'chat.reply.generated')) activity.push({ teamId: context.team.id, projectId: context.project.project.id, eventId: event.event_id, title: event.title, text: names[event.event_type] || event.event_type, label: `${teamName} · ${projectName}`, at: event.created_at });
+    for (const task of context.project.planner?.tasks || []) activity.push({ teamId: context.team.id, projectId: context.project.project.id, view: 'tasks', title: task.title, text: `Görev · ${task.assignee}`, label: `${teamName} · ${projectName}`, at: task.completed_at || task.created_at });
+    for (const calendar of context.project.planner?.calendar || []) activity.push({ teamId: context.team.id, projectId: context.project.project.id, view: 'calendar', title: calendar.title, text: `Etkinlik · ${calendar.date}${calendar.time ? ` ${calendar.time}` : ''}`, label: `${teamName} · ${projectName}`, at: calendar.created_at || `${calendar.date}T00:00:00` });
+  }
+  activity.sort((a, b) => String(b.at || '').localeCompare(String(a.at || ''))).slice(0, 20).forEach(item => {
+    const target = `data-notification-team="${escape(item.teamId)}"${item.projectId ? ` data-notification-project="${escape(item.projectId)}"` : ''}${item.eventId ? ` data-notification-event="${escape(item.eventId)}"` : ''}${item.view ? ` data-notification-view="${escape(item.view)}"` : ''}${item.chatScope ? ` data-notification-chat-scope="${escape(item.chatScope)}"` : ''}`;
+    items.push(`<button class="notification-item" type="button" ${target}><strong>${escape(item.title)}</strong><span>${escape(item.text)}</span><small>GENEL · ${escape(item.label)}${item.at ? ` · ${date(item.at)}` : ''}</small></button>`);
+  });
   return items.join('') || notificationEmpty('Henüz genel bildirim yok.');
 }
 function repoNotificationMarkup() {
@@ -178,9 +241,10 @@ function repoNotificationMarkup() {
 function renderNotificationCenter() {
   const panel = $('notifications-panel');
   if (!panel) return;
-  const counts = notificationSectionCounts(), total = counts.general + counts.repo;
-  $('notifications-badge').hidden = total === 0;
-  $('notifications-badge').textContent = total > 99 ? '99+' : String(total);
+  const counts = notificationSectionCounts();
+  const uniqueTotal = counts.general + (state.team && localStorage.getItem(setupSeenKey()) !== 'true' ? 1 : 0);
+  $('notifications-badge').hidden = uniqueTotal === 0;
+  $('notifications-badge').textContent = uniqueTotal > 99 ? '99+' : String(uniqueTotal);
   $('general-notification-count').textContent = counts.general ? String(counts.general) : '';
   $('repo-notification-count').textContent = counts.repo ? String(counts.repo) : '';
   document.querySelectorAll('[data-notification-section]').forEach(button => button.setAttribute('aria-selected', String(button.dataset.notificationSection === state.notificationSection)));
@@ -188,9 +252,10 @@ function renderNotificationCenter() {
 }
 function markNotificationSectionSeen(section) {
   if (section === 'general') {
-    notificationTracker.markSeen(teamNotificationScope(), 'team');
-    notificationTracker.markSeen(teamNotificationScope(), 'chat');
-    if (state.updateInfo) localStorage.setItem('teambrain-notification-update-seen', state.updateInfo.latest);
+    const contexts = notificationContexts();
+    notificationTracker.markSeenMany(contexts.teams.map(context => context.scope), ['team', 'chat']);
+    notificationTracker.markSeenMany(contexts.projects.map(context => context.scope), ['chat', 'activity', 'decisions', 'calendar', 'tasks']);
+    if (state.updateInfo?.available) localStorage.setItem('teambrain-notification-update-seen', state.updateInfo.latest);
   } else {
     for (const category of ['chat', 'activity', 'decisions', 'calendar', 'tasks']) notificationTracker.markSeen(projectNotificationScope(), category);
     if (state.team) localStorage.setItem(setupSeenKey(), 'true');
@@ -199,9 +264,9 @@ function markNotificationSectionSeen(section) {
   renderNotificationCenter();
 }
 function observeNotifications(markCurrent = false) {
-  const { teamItems, projectItems } = notificationItems();
-  notificationTracker.observe(teamNotificationScope(), teamItems, ownActors());
-  notificationTracker.observe(projectNotificationScope(), projectItems, ownActors());
+  const contexts = notificationContexts();
+  for (const context of contexts.teams) notificationTracker.observe(context.scope, context.items, ownActors());
+  for (const context of contexts.projects) notificationTracker.observe(context.scope, context.items, ownActors());
   if (markCurrent) markViewSeen();
   renderNotificationLights();
   renderNotificationCenter();
@@ -237,11 +302,18 @@ async function showSetupGuide(teamId) {
 }
 async function reloadTeams() {
   if (!state.actors.length) state.actors = (await api('/api/identity')).aliases || [];
-  [state.teams, state.syncHealth] = await Promise.all([api('/api/teams'), api('/api/sync')]);
+  [state.teams, state.syncHealth, state.notificationWorkspace] = await Promise.all([api('/api/teams'), api('/api/sync'), api('/api/notifications')]);
   restoreSelection();
   choose();
   await loadTeamChat();
   await loadProject();
+  if (state.view === 'vault') await loadVault();
+}
+async function loadVault(force = false) {
+  if (state.vault && !force) { render(); return; }
+  $('content').innerHTML = '<div class="panel empty" role="status">Kasa hazırlanıyor…</div>';
+  try { state.vault = await api('/api/vault'); render(); }
+  catch (error) { toast(error.message); $('content').innerHTML = `<section class="panel">${empty('Kasa açılamadı.', error.message)}</section>`; }
 }
 async function loadTeamChat() {
   if (!state.team) { state.teamChat = []; return; }
@@ -290,18 +362,18 @@ function renderList() {
 }
 function renderShell(data, decisions) {
   document.body.classList.toggle('calendar-active', state.view === 'calendar');
-  $('breadcrumb').textContent = state.view === 'projects' ? `${team()?.name || 'Çalışma alanı'} / Projeler` : `${team()?.name || 'Çalışma alanı'}${data ? ' / ' + data.project.name : ''}`;
+  $('breadcrumb').textContent = state.view === 'vault' ? 'Çalışma alanı / Kasa' : state.view === 'projects' ? `${team()?.name || 'Çalışma alanı'} / Projeler` : `${team()?.name || 'Çalışma alanı'}${data ? ' / ' + data.project.name : ''}`;
   $('heading').textContent = state.view === 'overview' ? data?.project.name || 'Ekibinin ortak hafızası.' : views[state.view];
-  $('subtitle').textContent = state.view === 'projects' ? 'Kişisel projelerini ayrı hafızalar olarak aç ve aralarında geçiş yap.' : state.view === 'chat' ? 'Projenin hafızasıyla konuş; her mesaj aynı zamanda kayıt olur.' : state.view === 'overview' ? 'Kararlar, çalışmalar ve onları birbirine bağlayan nedenler.' : 'Seçili projenin bilgisi. İhtiyacın olan bağlam, bir arada.';
+  $('subtitle').textContent = state.view === 'vault' ? 'TeamBrain’de saklanan her şeyi ekipler ve projeler arasında bul.' : state.view === 'projects' ? 'Kişisel projelerini ayrı hafızalar olarak aç ve aralarında geçiş yap.' : state.view === 'chat' ? 'Projenin hafızasıyla konuş; her mesaj aynı zamanda kayıt olur.' : state.view === 'tree' ? 'Konuların hangi kararlara ve çalışmalara dönüştüğünü dallarıyla izle.' : state.view === 'overview' ? 'Kararlar, çalışmalar ve onları birbirine bağlayan nedenler.' : 'Seçili projenin bilgisi. İhtiyacın olan bağlam, bir arada.';
   $('profile').textContent = (data?.actor || 'Y').slice(0, 1).toUpperCase();
   $('profile').title = data?.actor || 'Yerel kullanıcı';
   $('new-event').disabled = !data;
   $('upload-document').disabled = !data;
-  $('new-event').hidden = state.view === 'projects';
-  $('upload-document').hidden = state.view === 'projects';
+  $('new-event').hidden = state.view === 'projects' || state.view === 'vault';
+  $('upload-document').hidden = state.view === 'projects' || state.view === 'vault';
   $('hero').hidden = state.view !== 'overview';
   $('hero-action').textContent = !state.team ? 'İlk ekibini oluştur ↗' : !state.project ? 'İlk projeni oluştur ↗' : 'Bir karar kaydet ↗';
-  $('metrics').hidden = !data || state.view === 'integrations' || state.view === 'chat' || state.view === 'projects';
+  $('metrics').hidden = !data || state.view === 'integrations' || state.view === 'vault' || state.view === 'chat' || state.view === 'tree' || state.view === 'projects';
   $('metrics').innerHTML = [[data?.total || 0, 'Toplam kayıt', 'Projenin kalıcı hafızası', '≋'], [decisions.length, 'Karar kaydı', 'Gerekçesiyle birlikte', '◇'], [events().filter(e => e.event_type === 'issue.detected').length, 'Sorun kaydı', 'Açık/kapalı takibi henüz yok', '◌'], [new Set(events().map(e => e.actor_id)).size, 'Katkı veren', 'Kayıtlardaki farklı kişiler', '↗']].map(([n, label, hint, icon]) => `<div class="metric"><div class="metric-top"><span>${label}</span><span>${icon}</span></div><strong>${n}</strong><small>${hint}</small></div>`).join('');
   document.querySelectorAll('[data-view]').forEach(b => { b.classList.toggle('active', b.dataset.view === state.view); b.setAttribute('aria-current', b.dataset.view === state.view ? 'page' : 'false'); });
   $('browse-projects').classList.toggle('active', state.view === 'projects');
@@ -337,6 +409,71 @@ function renderCalendar() {
   const tasks = state.snapshot.planner?.tasks || [], done = tasks.filter(t => t.status === 'done').length;
   $('content').innerHTML = `<div class="planner-toolbar"><div><h2>Ekip görevleri</h2><p>${done}/${tasks.length} görev tamamlandı. Sorumlu kişi bitirdiğinde kutuyu işaretleyin.</p></div><button class="primary" data-action="task">＋ Görev ata</button></div><section class="panel planner-list">${tasks.map(task => `<article class="task-item ${task.status === 'done' ? 'done' : ''}"><button class="task-check" data-task="${escape(task.id)}" aria-label="${task.status === 'done' ? 'Tamamlandı olarak işaretini kaldır' : 'Görevi tamamlandı işaretle'}">${task.status === 'done' ? '✓' : ''}</button><div><h3>${escape(task.title)}</h3><p>Sorumlu: <strong>${escape(task.assignee)}</strong>${task.due_date ? ` · Son tarih: ${escape(task.due_date)}` : ''}</p>${task.description ? `<small>${escape(task.description)}</small>` : ''}${task.completed_by ? `<small class="task-completed">Tamamlayan: ${escape(task.completed_by)}</small>` : ''}</div></article>`).join('') || empty('Henüz görev yok.', 'Ekip üyelerine görev atayarak başlayın.', {id:'task',text:'＋ İlk görevi ata'})}</section>`;
 }
+const vaultKinds = {
+  record: ['Kayıtlar', '≋'], decision: ['Kararlar', '◇'], issue: ['Sorunlar', '!'], session: ['Oturumlar', '⌁'],
+  chat: ['Sohbetler', '◌'], document: ['Belgeler', '▤'], task: ['Görevler', '✓'], calendar: ['Takvim', '◷'], member: ['Üyeler', '♧'], shared: ['Paylaşılan hafıza', '◈']
+};
+function vaultEventKind(event) {
+  if (event.event_type?.startsWith('decision.')) return 'decision';
+  if (event.event_type === 'issue.detected') return 'issue';
+  if (event.event_type?.startsWith('session.')) return 'session';
+  if (event.event_type?.startsWith('chat.')) return 'chat';
+  return 'record';
+}
+function buildVaultEntries() {
+  const entries = [];
+  for (const item of state.vault?.shared || []) entries.push({ id: `shared:${item.path}`, kind: 'shared', title: item.title, body: item.body || '', teamId: '', teamName: 'TeamBrain', projectId: '', projectName: item.path, at: item.updated_at, raw: item });
+  for (const teamItem of state.vault?.teams || []) {
+    for (const member of teamItem.members || []) entries.push({ id: `member:${teamItem.id}:${member.login}`, kind: 'member', title: member.name || member.login, body: `@${member.login}`, actor: member.login, teamId: teamItem.id, teamName: teamItem.name, projectId: '', projectName: 'Ekip geneli', at: '' });
+    for (const message of teamItem.chat || []) entries.push({ id: `team-chat:${teamItem.id}:${message.event_id}`, kind: 'chat', title: message.title || `${message.actor_id || 'Ekip üyesi'} mesajı`, body: message.body || '', actor: message.actor_id, teamId: teamItem.id, teamName: teamItem.name, projectId: '', projectName: 'Ekip sohbeti', at: message.created_at, raw: message });
+    for (const projectItem of teamItem.projects || []) {
+      const projectId = projectItem.project?.id || '', projectName = projectItem.project?.name || 'Adsız proje';
+      for (const event of projectItem.events || []) entries.push({ id: `event:${teamItem.id}:${projectId}:${event.event_id}`, kind: vaultEventKind(event), title: event.title || 'Başlıksız kayıt', body: event.body || '', actor: event.actor_id, teamId: teamItem.id, teamName: teamItem.name, projectId, projectName, at: event.created_at, raw: event });
+      for (const document of projectItem.documents || []) { const filename = document.filename || String(document.file || '').split('/').pop().replace(/^[0-9a-f-]{36}-/, '').replace(/\.md$/i, '').replace(/-/g, ' '); entries.push({ id: `document:${teamItem.id}:${projectId}:${document.file}`, kind: 'document', title: filename || 'İçe aktarılan belge', body: document.body || document.file || '', teamId: teamItem.id, teamName: teamItem.name, projectId, projectName, at: document.imported_at || '', raw: document }); }
+      for (const task of projectItem.planner?.tasks || []) entries.push({ id: `task:${teamItem.id}:${projectId}:${task.id}`, kind: 'task', title: task.title, body: task.description || `${task.assignee || 'Atanmamış'} · ${task.status === 'done' ? 'Tamamlandı' : 'Açık'}`, actor: task.assignee, teamId: teamItem.id, teamName: teamItem.name, projectId, projectName, at: task.created_at || task.due_date, raw: task });
+      for (const item of projectItem.planner?.calendar || []) entries.push({ id: `calendar:${teamItem.id}:${projectId}:${item.id}`, kind: 'calendar', title: item.title, body: [item.date, item.time, item.location, item.notes].filter(Boolean).join(' · '), actor: item.created_by, teamId: teamItem.id, teamName: teamItem.name, projectId, projectName, at: item.created_at || (item.date ? `${item.date}T${item.time || '00:00'}:00` : ''), raw: item });
+    }
+  }
+  return entries.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')) || a.title.localeCompare(b.title, 'tr'));
+}
+function filteredVaultEntries() {
+  const filters = state.vaultFilters, query = filters.query.toLocaleLowerCase('tr-TR');
+  return state.vaultEntries.filter(item => (!filters.team || item.teamId === filters.team) && (!filters.project || item.projectId === filters.project) && (!filters.kind || item.kind === filters.kind) && (!query || `${item.title} ${item.body} ${item.actor || ''} ${item.teamName} ${item.projectName}`.toLocaleLowerCase('tr-TR').includes(query)));
+}
+function vaultEntryMarkup(item) {
+  const [label, icon] = vaultKinds[item.kind] || vaultKinds.record;
+  return `<button class="vault-entry" type="button" data-vault-entry="${escape(item.id)}"><span class="vault-entry-icon kind-${escape(item.kind)}">${icon}</span><span class="vault-entry-copy"><span class="vault-entry-top"><strong>${escape(item.title)}</strong><span class="vault-kind">${escape(label)}</span></span><span class="vault-entry-preview">${escape(item.body || 'Ek açıklama bulunmuyor.')}</span><span class="vault-entry-meta"><b>${escape(item.teamName)}</b><i>›</i>${escape(item.projectName)}${item.actor ? `<i>·</i>${escape(item.actor)}` : ''}</span></span>${item.at ? `<time datetime="${escape(item.at)}">${date(item.at)}<small>${time(item.at)}</small></time>` : ''}</button>`;
+}
+function renderVaultResults() {
+  const filtered = filteredVaultEntries(), target = $('vault-results'), count = $('vault-result-count');
+  if (count) count.textContent = `${filtered.length} öğe`;
+  if (target) target.innerHTML = filtered.map(vaultEntryMarkup).join('') || empty('Bu seçimde kayıt yok.', 'Ekip, proje, tür veya arama seçimini değiştirin.');
+}
+function renderVault() {
+  if (!state.vault) { $('content').innerHTML = '<div class="panel empty" role="status">Kasa hazırlanıyor…</div>'; return; }
+  state.vaultEntries = buildVaultEntries();
+  const filters = state.vaultFilters, teams = state.vault.teams || [];
+  if (filters.team && !teams.some(item => item.id === filters.team)) filters.team = '';
+  const selectedTeam = teams.find(item => item.id === filters.team), projects = selectedTeam ? selectedTeam.projects : teams.flatMap(teamItem => (teamItem.projects || []).map(projectItem => ({ ...projectItem, teamName: teamItem.name })));
+  if (filters.project && !projects.some(item => item.project?.id === filters.project)) filters.project = '';
+  const projectCount = teams.reduce((sum, item) => sum + (item.projects?.length || 0), 0);
+  const documentCount = state.vaultEntries.filter(item => item.kind === 'document' || item.kind === 'shared').length;
+  const peopleCount = new Set(state.vaultEntries.filter(item => item.actor).map(item => item.actor)).size;
+  const warnings = teams.flatMap(item => (item.projects || []).filter(project => project.error).map(project => `${item.name} / ${project.project.name}: ${project.error}`));
+  $('content').innerHTML = `<section class="vault-hero"><div><span class="eyebrow">TEAMBRAIN KASASI</span><h2>Hafızanın tamamı,<br><em>tek ve sakin bir yerde.</em></h2><p>Kayıtlar değişmeden kendi ekip ve proje bağlamında kalır. Kasa yalnızca hepsini güvenli, salt okunur bir görünümde bir araya getirir.</p></div><div class="vault-seal" aria-hidden="true"><span>▣</span><small>YEREL<br>HAFIZA</small></div></section><section class="vault-stats"><div><strong>${teams.length}</strong><span>Ekip</span></div><div><strong>${projectCount}</strong><span>Proje</span></div><div><strong>${state.vaultEntries.length}</strong><span>Saklanan öğe</span></div><div><strong>${documentCount}</strong><span>Dosya</span></div><div><strong>${peopleCount}</strong><span>Katkı veren</span></div></section><section class="vault-controls" aria-label="Kasa filtreleri"><label><span>Ekip</span><select id="vault-team"><option value="">Tüm ekipler</option>${teams.map(item => `<option value="${escape(item.id)}">${escape(item.name)}</option>`).join('')}</select></label><label><span>Proje</span><select id="vault-project"><option value="">Tüm projeler</option>${projects.map(item => `<option value="${escape(item.project.id)}">${escape(item.teamName ? `${item.teamName} / ` : '')}${escape(item.project.name)}</option>`).join('')}</select></label><label><span>İçerik</span><select id="vault-kind"><option value="">Her şey</option>${Object.entries(vaultKinds).map(([value, meta]) => `<option value="${value}">${meta[0]}</option>`).join('')}</select></label><label class="vault-search"><span>Ara</span><input id="vault-search" type="search" value="${escape(filters.query)}" placeholder="Başlık, açıklama veya kişi ara…"></label><button class="vault-refresh" type="button" data-action="vault-refresh" title="Kasayı yenile" aria-label="Kasayı yenile">↻</button></section>${warnings.length ? `<div class="vault-warning"><strong>${warnings.length} proje okunamadı.</strong><span>${escape(warnings.join(' · '))}</span></div>` : ''}<section class="vault-library panel"><header><div><span class="eyebrow">KAYIT KATALOĞU</span><h3>Her şey</h3></div><span id="vault-result-count"></span></header><div id="vault-results" class="vault-results"></div></section>`;
+  $('vault-team').value = filters.team; $('vault-project').value = filters.project; $('vault-kind').value = filters.kind;
+  $('vault-team').onchange = event => { filters.team = event.target.value; filters.project = ''; renderVault(); };
+  $('vault-project').onchange = event => { filters.project = event.target.value; renderVaultResults(); };
+  $('vault-kind').onchange = event => { filters.kind = event.target.value; renderVaultResults(); };
+  $('vault-search').oninput = event => { filters.query = event.target.value; renderVaultResults(); };
+  renderVaultResults();
+}
+function showVaultDetail(entryId) {
+  const item = state.vaultEntries.find(entry => entry.id === entryId); if (!item) return;
+  const [label] = vaultKinds[item.kind] || vaultKinds.record;
+  $('detail-content').innerHTML = `<div class="vault-detail-path"><span>${escape(item.teamName)}</span><b>›</b><span>${escape(item.projectName)}</span></div><span class="badge">${escape(label)}</span><h2>${escape(item.title)}</h2><p class="detail-meta">${item.actor ? `${escape(item.actor)} · ` : ''}${item.at ? `${date(item.at)} · ${time(item.at)}` : 'Tarih bilgisi yok'}</p><div class="detail-body">${escape(item.body || 'Ek açıklama bulunmuyor.')}</div>${item.kind === 'task' ? `<p class="detail-meta">Durum: ${item.raw.status === 'done' ? 'Tamamlandı' : 'Açık'}${item.raw.due_date ? ` · Son tarih: ${escape(item.raw.due_date)}` : ''}</p>` : ''}${item.kind === 'document' ? `<p class="detail-meta">Kasa yolu: ${escape(item.raw.file)}</p>` : ''}${item.kind === 'shared' && item.raw.truncated ? '<p class="detail-meta">Bu büyük dosyanın ilk 100.000 karakteri gösteriliyor.</p>' : ''}`;
+  $('detail').showModal();
+}
 function render() {
   const data = state.snapshot;
   const decisions = events().filter(e => e.event_type.startsWith('decision.'));
@@ -344,15 +481,16 @@ function render() {
   if (state.view === 'team') { renderTeam(); return; }
   if (state.view === 'chat' && !state.project) { renderChat(); return; }
   if (state.view === 'integrations') { renderConnections(); return; }
+  if (state.view === 'vault') { renderVault(); return; }
   if (state.view === 'projects') { renderProjects(); return; }
   if (!state.project) {
     const labels = {
       overview: ['Bu ekibin ilk projesini ekle.', 'Genel bakış, proje kayıtları oluşturulduğunda burada görünür.'],
       activity: ['Aktivite için bir proje gerekli.', 'Kayıtlar ve değişiklikler proje bazında tutulur.'],
+      tree: ['Bilgi ağacı için bir proje gerekli.', 'Kayıtlar birbirine bağlandıkça proje ağacı burada oluşur.'],
       decisions: ['Karar defteri için bir proje gerekli.', 'Kararlar, ait oldukları projenin gerekçeleriyle birlikte saklanır.'],
       calendar: ['Takvim için bir proje gerekli.', 'Etkinlikler seçili projenin planına eklenir.'],
-      tasks: ['Görevler için bir proje gerekli.', 'Görevler seçili projenin ekip üyelerine atanır.'],
-      daily: ['Günün özeti için bir proje gerekli.', 'Günlük özet, seçili projenin bugünkü kayıtlarından oluşturulur.']
+      tasks: ['Görevler için bir proje gerekli.', 'Görevler seçili projenin ekip üyelerine atanır.']
     };
     const [title, text] = state.team ? (labels[state.view] || labels.overview) : ['Kişisel veya ekip alanını başlat.', 'GitHub bağlamadan kişisel ikinci beynini oluşturabilir ya da ekip paylaşımı için repo ekleyebilirsin.'];
     $('content').innerHTML = `<section class="panel">${empty(title, text, { id: state.team ? 'project' : 'team', text: state.team ? '＋ Proje oluştur' : '＋ Ekip oluştur' })}</section>`;
@@ -362,10 +500,10 @@ function render() {
   if (state.view === 'team') renderTeam();
   else if (state.view === 'overview') renderOverview(decisions);
   else if (state.view === 'chat') renderChat();
+  else if (state.view === 'tree') renderTree();
   else if (['activity', 'decisions'].includes(state.view)) renderActivity();
   else if (state.view === 'calendar') renderCalendar();
   else if (state.view === 'tasks') renderTasks();
-  else if (state.view === 'daily') renderDaily();
   else renderConnections();
 }
 function renderTeam() {
@@ -378,6 +516,152 @@ function renderTeam() {
 }
 function renderOverview(decisions) {
   $('content').innerHTML = `<div class="content-grid"><section class="panel"><div class="panel-head"><h2>Son hareketler</h2><button class="text-button" data-action="activity">Tümünü gör ↗</button></div><div class="feed">${events().filter(e => !e.event_type.startsWith('chat.')).slice(0, 5).map(record).join('') || empty('İlk kaydınla hikâye başlasın.', 'Bir gelişme, fikir veya karar ekle.', { id: 'event', text: 'Yeni kayıt' })}</div></section><section class="panel"><div class="panel-head"><h2>Karar defteri</h2><span>◇</span></div>${decisions.slice(0, 3).map(e => `<button class="decision-card" data-event="${escape(e.event_id)}"><span class="badge">${escape(names[e.event_type] || 'Karar')}</span><h3>${escape(e.title)}</h3><span class="record-meta">${date(e.created_at)} · Gerekçeyi aç ↗</span></button>`).join('') || empty('Nedenini de hatırla.', 'Aldığınız kararları gerekçesiyle kaydedin.')}</section></div><div class="link-status">◉ &nbsp; Kayıtlar bu bilgisayarda saklanıyor. Sohbet dahil tüm proje hafızası yerel event olarak tutulur.</div>`;
+}
+function treeKind(event) {
+  if (event.event_type === 'issue.detected') return ['issue', 'SORUN', '!'];
+  if (event.event_type.startsWith('decision.')) return ['decision', 'KARAR', '◇'];
+  if (event.event_type === 'change.recorded') return ['change', 'DEĞİŞİKLİK', '↗'];
+  if (event.event_type === 'impact.detected') return ['impact', 'ETKİ', '⌁'];
+  return ['note', 'NOT', '≋'];
+}
+const mapColors = ['#4e79a7', '#59a14f', '#e15759', '#b07aa1', '#f28e2b', '#76b7b2'];
+function applyMindMapTransform() {
+  if (state.mindMap.viewport) Object.assign(state.mindMap, TeamBrainTree.constrainMapView(state.mindMap, state.mindMap.viewport));
+  const world = document.querySelector('.mindmap-world');
+  if (world) world.style.transform = `translate(${state.mindMap.x}px,${state.mindMap.y}px) scale(${state.mindMap.scale})`;
+  const percent = document.querySelector('[data-map-scale]');
+  if (percent) percent.textContent = `${Math.round(state.mindMap.scale * 100)}%`;
+  const zoomOut = document.querySelector('[data-map-control="out"]'), zoomIn = document.querySelector('[data-map-control="in"]');
+  if (zoomOut) zoomOut.disabled = state.mindMap.scale <= (state.mindMap.viewport?.minScale || .35) + .001;
+  if (zoomIn) zoomIn.disabled = state.mindMap.scale >= (state.mindMap.viewport?.maxScale || 1.65) - .001;
+}
+function mindMapNode(placed, rootId) {
+  const event = placed.node.event, root = placed.id === rootId, [kind, label] = root ? ['root', 'ANA KONU'] : treeKind(event), childCount = placed.node.children.length;
+  const colorClass = root ? 'branch-root' : `branch-${placed.branch % mapColors.length}`;
+  const detail = event.body ? `<small>${escape(String(event.body).slice(0, 90))}</small>` : '';
+  const canFocus = childCount > 0 && !root, cardAction = canFocus ? `data-tree-focus="${escape(placed.id)}"` : (root && placed.id === '__project__' ? '' : `data-event="${escape(placed.id)}"`);
+  const count = placed.descendants ? `<span class="mindmap-count">${placed.descendants} alt kayıt${canFocus ? ' · dala gir →' : ''}</span>` : '<span class="mindmap-count">Ayrıntıyı aç →</span>';
+  return `<div class="mindmap-node ${kind} ${root ? 'root' : ''} ${colorClass}" data-map-node="${escape(placed.id)}" data-map-x="${placed.x}" data-map-y="${placed.y}"><button class="mindmap-card" type="button" ${cardAction}><span class="mindmap-kicker">${label}</span><strong>${escape(event.title)}</strong>${root ? detail : ''}${count}</button>${canFocus ? `<button class="mindmap-info" type="button" data-event="${escape(placed.id)}" aria-label="${escape(event.title)} ayrıntısını aç" title="Ayrıntıyı aç">i</button>` : ''}</div>`;
+}
+function setupMindMapInteractions(layout) {
+  const stage = document.querySelector('.mindmap-stage'), world = document.querySelector('.mindmap-world');
+  if (!stage) return;
+  const measure = () => {
+    const centerX = stage.clientWidth / 2, centerY = stage.clientHeight / 2;
+    const maxX = Math.max(...layout.nodes.map(node => Math.abs(node.x))) + 135, maxY = Math.max(...layout.nodes.map(node => Math.abs(node.y))) + 70;
+    const fit = Math.max(.35, Math.min(1, (centerX - 18) / maxX, (centerY - 18) / maxY));
+    state.mindMap.fit = fit;
+    state.mindMap.viewport = { halfWidth: centerX, halfHeight: centerY, contentHalfWidth: maxX, contentHalfHeight: maxY, minScale: fit, maxScale: 1.5, padding: 18 };
+    if (!state.mindMap.fitted) { state.mindMap.scale = fit; state.mindMap.fitted = true; }
+    world.querySelectorAll('[data-map-node]').forEach(node => { node.style.left = `${centerX + Number(node.dataset.mapX)}px`; node.style.top = `${centerY + Number(node.dataset.mapY)}px`; });
+    world.querySelectorAll('[data-edge-x1]').forEach(edge => { const x1 = Number(edge.dataset.edgeX1), y1 = Number(edge.dataset.edgeY1), dx = Number(edge.dataset.edgeX2) - x1, dy = Number(edge.dataset.edgeY2) - y1; edge.style.left = `${centerX + x1}px`; edge.style.top = `${centerY + y1}px`; edge.style.width = `${Math.hypot(dx, dy)}px`; edge.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`; });
+    applyMindMapTransform();
+  };
+  measure(); requestAnimationFrame(measure);
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(measure).observe(stage);
+  let dragging = false, startX = 0, startY = 0, originX = 0, originY = 0;
+  stage.addEventListener('wheel', event => {
+    event.preventDefault();
+    const oldScale = state.mindMap.scale, minScale = state.mindMap.viewport?.minScale || .35;
+    const newScale = Math.max(minScale, Math.min(1.5, oldScale * (event.deltaY > 0 ? .92 : 1.08)));
+    const rect = stage.getBoundingClientRect(), pointerX = event.clientX - rect.left - rect.width / 2, pointerY = event.clientY - rect.top - rect.height / 2, ratio = newScale / oldScale;
+    state.mindMap.x = pointerX - (pointerX - state.mindMap.x) * ratio;
+    state.mindMap.y = pointerY - (pointerY - state.mindMap.y) * ratio;
+    state.mindMap.scale = newScale;
+    applyMindMapTransform();
+  }, { passive: false });
+  stage.addEventListener('pointerdown', event => {
+    if (event.target.closest('button')) return;
+    dragging = true; startX = event.clientX; startY = event.clientY; originX = state.mindMap.x; originY = state.mindMap.y;
+    stage.setPointerCapture(event.pointerId); stage.classList.add('dragging');
+  });
+  stage.addEventListener('pointermove', event => {
+    if (!dragging) return;
+    state.mindMap.x = originX + event.clientX - startX; state.mindMap.y = originY + event.clientY - startY; applyMindMapTransform();
+  });
+  const stopDragging = () => { dragging = false; stage.classList.remove('dragging'); };
+  stage.addEventListener('pointerup', stopDragging);
+  stage.addEventListener('pointercancel', stopDragging);
+  stage.addEventListener('lostpointercapture', stopDragging);
+  applyMindMapTransform();
+}
+function hierarchyNode(node, branch = 0, root = false) {
+  const id = node.event.event_id, expanded = state.treeExpanded.has(id), childCount = node.children.length;
+  const [kind, label] = root ? ['root', 'PROJE KÖKÜ'] : treeKind(node.event), colorClass = root ? 'branch-root' : `branch-${branch % mapColors.length}`;
+  const detailAction = root ? '' : `data-event="${escape(id)}"`, body = root ? '<small>Tüm ana konular bu kökten dallanır.</small>' : '';
+  const chevron = expanded ? '<svg class="tree-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 6 4.5 4 4.5-4"/></svg>' : '<svg class="tree-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3.5 4 4.5-4 4.5"/></svg>';
+  const branchControl = childCount ? `<button class="hierarchy-toggle" type="button" data-tree-branch="${escape(id)}" aria-expanded="${String(expanded)}">${chevron}<span>${childCount} dalı ${expanded ? 'daralt' : 'aç'}</span></button>` : '<span class="hierarchy-leaf">Son kayıt</span>';
+  const addParent = root ? '' : id;
+  return `<li class="hierarchy-item ${colorClass}"><article class="hierarchy-node ${kind} ${root ? 'root' : ''}" data-tree-node="${escape(id)}"><button class="hierarchy-card" type="button" ${detailAction}><span class="mindmap-kicker">${label}</span><strong>${escape(node.event.title)}</strong>${body}<span class="hierarchy-count">${node.descendants} alt kayıt</span></button><div class="hierarchy-node-actions">${branchControl}<button type="button" class="hierarchy-add" data-tree-add="${escape(addParent)}" aria-label="${escape(node.event.title)} altına kayıt ekle" title="Alt kayıt ekle">＋</button></div></article>${childCount && expanded ? `<ul>${node.children.map((child, index) => hierarchyNode(child, root ? index : branch, false)).join('')}</ul>` : ''}</li>`;
+}
+function projectHierarchy() {
+  return TeamBrainTree.buildProjectTree(TeamBrainTree.buildForest(events()).forest, state.snapshot?.project?.name || 'Proje');
+}
+function hierarchyAnchor(root, id) {
+  return [...(root?.querySelectorAll('[data-tree-node]') || [])].find(node => node.dataset.treeNode === id);
+}
+function applyHierarchyScale() {
+  const tree = document.querySelector('.hierarchy-tree');
+  if (tree) tree.style.zoom = String(state.treeScale);
+  const label = document.querySelector('[data-tree-scale]');
+  if (label) label.textContent = `${Math.round(state.treeScale * 100)}%`;
+  document.querySelectorAll('[data-tree-zoom]').forEach(button => {
+    button.disabled = (button.dataset.treeZoom === 'out' && state.treeScale <= .7) || (button.dataset.treeZoom === 'in' && state.treeScale >= 1.4);
+  });
+}
+function setHierarchyScale(nextScale) {
+  const scroll = document.querySelector('.hierarchy-scroll');
+  const previous = state.treeScale;
+  const next = Math.max(.7, Math.min(1.4, Math.round(nextScale * 10) / 10));
+  if (!scroll || previous === next) return;
+  const centerX = (scroll.scrollLeft + scroll.clientWidth / 2) / previous;
+  const centerY = (scroll.scrollTop + scroll.clientHeight / 2) / previous;
+  state.treeScale = next;
+  applyHierarchyScale();
+  scroll.scrollLeft = centerX * next - scroll.clientWidth / 2;
+  scroll.scrollTop = centerY * next - scroll.clientHeight / 2;
+}
+function rerenderHierarchy(anchorId) {
+  const scroll = document.querySelector('.hierarchy-scroll');
+  if (!scroll) return renderTree();
+  const currentAnchor = hierarchyAnchor(scroll, anchorId);
+  const previousRect = currentAnchor?.getBoundingClientRect();
+  const previousLeft = scroll.scrollLeft, previousTop = scroll.scrollTop;
+  scroll.innerHTML = `<ul class="hierarchy-tree">${hierarchyNode(projectHierarchy(), 0, true)}</ul>`;
+  applyHierarchyScale();
+  const nextAnchor = hierarchyAnchor(scroll, anchorId);
+  if (previousRect && nextAnchor) {
+    const nextRect = nextAnchor.getBoundingClientRect();
+    scroll.scrollLeft += nextRect.left - previousRect.left;
+    scroll.scrollTop += nextRect.top - previousRect.top;
+  } else {
+    scroll.scrollLeft = previousLeft;
+    scroll.scrollTop = previousTop;
+  }
+}
+function updateTreeFullscreenButton() {
+  const button = document.querySelector('[data-tree-fullscreen]');
+  if (!button) return;
+  const active = document.fullscreenElement?.classList.contains('hierarchy-shell');
+  button.querySelector('[data-fullscreen-label]').textContent = active ? 'Tam ekrandan çık' : 'Tam ekran';
+  button.setAttribute('aria-pressed', String(active));
+  button.setAttribute('aria-label', active ? 'Ağaç tam ekranından çık' : 'Ağacı tam ekrana al');
+}
+document.addEventListener('fullscreenchange', updateTreeFullscreenButton);
+function renderTree() {
+  const model = TeamBrainTree.buildForest(events());
+  if (!model.stats.records) {
+    $('content').innerHTML = `<section class="panel">${empty('Ağaç ilk kaydı bekliyor.', 'Yeni bir kayıt ekleyin; sonraki kayıtları “Hangi kayda dayanıyor?” alanıyla ona bağlayın.', { id: 'event', text: '＋ İlk kaydı ekle' })}</section>`;
+    return;
+  }
+  const tree = TeamBrainTree.buildProjectTree(model.forest, state.snapshot?.project?.name || 'Proje');
+  if (state.treeInitializedProject !== state.project) {
+    state.treeExpanded = new Set(['__project__', ...tree.children.map(node => node.event.event_id)]);
+    state.treeInitializedProject = state.project;
+  }
+  $('content').innerHTML = `<div class="tree-toolbar"><div><span class="eyebrow">KÖK · DAL · ALT DAL</span><h2>${model.stats.records} kayıt · ${model.stats.roots} ana dal</h2><p>Her kayıt yalnızca gerçek üst konusunun altında yer alır.</p></div><div class="tree-actions"><button class="secondary" type="button" data-tree-reset>Ana dallara dön</button><button class="primary" type="button" data-tree-add="">＋ Ana konu ekle</button></div></div><section class="hierarchy-shell"><div class="hierarchy-guide"><span>Yukarıdan aşağı · genelden özele</span><div class="hierarchy-tools"><div class="hierarchy-zoom" role="group" aria-label="Ağaç yakınlaştırma"><button type="button" data-tree-zoom="out" aria-label="Uzaklaştır">−</button><button type="button" class="hierarchy-scale" data-tree-zoom="reset" data-tree-scale aria-label="Yakınlaştırmayı sıfırla">100%</button><button type="button" data-tree-zoom="in" aria-label="Yakınlaştır">＋</button></div><button type="button" class="hierarchy-fullscreen" data-tree-fullscreen aria-label="Ağacı tam ekrana al" aria-pressed="false"><svg class="fullscreen-icon fullscreen-enter" viewBox="0 0 18 18" aria-hidden="true"><path d="M7 3H3v4M11 3h4v4M15 11v4h-4M7 15H3v-4"/></svg><svg class="fullscreen-icon fullscreen-exit" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 7h4V3M15 7h-4V3M11 15v-4h4M7 15v-4H3"/></svg><span data-fullscreen-label>Tam ekran</span></button></div></div><div class="hierarchy-scroll"><ul class="hierarchy-tree">${hierarchyNode(tree, 0, true)}</ul></div></section>`;
+  applyHierarchyScale();
+  updateTreeFullscreenButton();
 }
 function renderChat() {
   const messages = chatEvents();
@@ -425,10 +709,6 @@ function renderActivity() {
   $('filter').addEventListener('change', e => { state.type = e.target.value; renderList(); });
   renderList();
 }
-function renderDaily() {
-  const todays = events().filter(e => new Date(e.created_at).toDateString() === new Date().toDateString() && !e.event_type.startsWith('chat.'));
-  $('content').innerHTML = `<section class="panel"><div class="panel-head"><h2>${today}</h2><span class="badge">KAYITLARDAN TÜRETİLDİ</span></div><div class="feed">${todays.map(record).join('') || empty('Bugün henüz kayıt yok.', 'Yeni kayıtlar günün özetinde otomatik görünür.')}</div></section><div class="link-status">Bu görünüm bir AI özeti değil; bugünkü kayıtların derlemesidir. Asıl kayıtları değiştirmez.</div>`;
-}
 function renderConnections() {
   $('content').innerHTML = `<div class="connections">${[['Git paylaşımı', 'Manuel CLI', 'Ekip paylaşımı için projeye özel bir memory deposu gerekir. Otomatik senkronizasyon ve arayüzden remote kurulumu henüz uygulanmadı.'], ['Chat sağlayıcıları', 'Yerel motor aktif', 'Codex, Claude veya Ollama adapterları aynı chat kontratına bağlanacak şekilde ayrıldı.'], ['Serena', 'Bağlı değil', 'Sembol ve kod etkisi analizleri için planlanan bağlantı. Mevcut adapter yalnızca verilen analiz verisini dönüştürür.'], ['Obsidian', 'Markdown uyumlu', 'Projenin memory klasöründeki kayıtlar okunabilir. Özel Obsidian eklentisi henüz bulunmuyor.']].map(([name, status, text]) => `<section class="panel connection"><h3>${name}</h3><span class="badge">${status}</span><p>${text}</p></section>`).join('')}</div><div class="link-status">Arama indeksini kayıtlardan yeniden kurabilirsin. <button class="secondary" data-action="reindex">İndeksi yenile</button></div>`;
 }
@@ -437,7 +717,7 @@ function editor(mode) {
   state.mode = mode;
   $('form-error').textContent = '';
   $('editor-title').textContent = { team: 'Yeni bir ekip oluştur', project: 'Ekibine bir proje ekle', event: 'Birlikte hatırlanacak bir kayıt' }[mode];
-  $('fields').innerHTML = mode === 'event' ? `<label for="event-type">Kayıt türü</label><select id="event-type" name="event_type">${Object.entries(names).filter(([v]) => !v.startsWith('chat.')).slice(0, 7).map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select><label for="event-title">Başlık</label><input id="event-title" name="title" maxlength="200" required placeholder="Örn. İletişim için CAN bus seçildi"><label for="event-body">Ne oldu, neden önemli?</label><textarea id="event-body" name="body" maxlength="50000" placeholder="Gerekçeyi ve değerlendirdiğiniz alternatifleri ekleyin."></textarea><label for="cause">Hangi kayda dayanıyor?</label><select id="cause" name="causation_id"><option value="">Bağımsız kayıt</option>${events().filter(e => !e.event_type.startsWith('chat.')).map(e => `<option value="${escape(e.event_id)}">${escape(e.title)}</option>`).join('')}</select>` : mode === 'team' ? `<input name="local_only" type="hidden" value="true"><label for="entity-name">Alan adı</label><input id="entity-name" name="name" maxlength="100" required placeholder="Örn. Kişisel projelerim"><p class="detail-meta">GitHub olmadan da yerel ikinci beynini oluşturabilirsin. Klasörler ve kayıtlar otomatik hazırlanır.</p><label for="github-url">GitHub ekip reposu <span class="record-meta">(isteğe bağlı)</span></label><input id="github-url" name="github_url" type="url" placeholder="https://github.com/organizasyon/ekip-reposu"><p class="detail-meta">Boş bırakırsan alan yalnızca bu bilgisayarda kalır; GitHub’a veri gönderilmez. Repo eklersen ekip paylaşımı için doğrulanır.</p>` : `<label for="entity-name">Proje adı</label><input id="entity-name" name="name" maxlength="100" required placeholder="Örn. Robot kontrol sistemi"><p class="detail-meta">Bu proje seçili ekibe ait olacak ve ayrı bir kayıt geçmişi tutacak.</p>`;
+  $('fields').innerHTML = mode === 'event' ? `<label for="event-type">Kayıt türü</label><select id="event-type" name="event_type">${Object.entries(names).filter(([v]) => !v.startsWith('chat.')).slice(0, 7).map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select><label for="event-title">Başlık</label><input id="event-title" name="title" maxlength="200" required placeholder="Örn. İletişim için CAN bus seçildi"><label for="event-body">Ne oldu, neden önemli?</label><textarea id="event-body" name="body" maxlength="50000" placeholder="Gerekçeyi ve değerlendirdiğiniz alternatifleri ekleyin."></textarea><label for="cause">Üst konu</label><select id="cause" name="causation_id"><option value="">Bağımsız ana konu</option>${events().filter(e => !e.event_type.startsWith('chat.')).map(e => `<option value="${escape(e.event_id)}">${escape(e.title)}</option>`).join('')}</select><p class="detail-meta">Genelden özele ilerlemek için bu kaydın bağlı olduğu üst konuyu seç.</p>` : mode === 'team' ? `<input name="local_only" type="hidden" value="true"><label for="entity-name">Alan adı</label><input id="entity-name" name="name" maxlength="100" required placeholder="Örn. Kişisel projelerim"><p class="detail-meta">GitHub olmadan da yerel ikinci beynini oluşturabilirsin. Klasörler ve kayıtlar otomatik hazırlanır.</p><label for="github-url">GitHub ekip reposu <span class="record-meta">(isteğe bağlı)</span></label><input id="github-url" name="github_url" type="url" placeholder="https://github.com/organizasyon/ekip-reposu"><p class="detail-meta">Boş bırakırsan alan yalnızca bu bilgisayarda kalır; GitHub’a veri gönderilmez. Repo eklersen ekip paylaşımı için doğrulanır.</p>` : `<label for="entity-name">Proje adı</label><input id="entity-name" name="name" maxlength="100" required placeholder="Örn. Robot kontrol sistemi"><p class="detail-meta">Bu proje seçili ekibe ait olacak ve ayrı bir kayıt geçmişi tutacak.</p>`;
   if (mode === 'team') $('github-url').addEventListener('input', event => { try { const match = event.target.value.match(/github\.com[/:][^/]+\/([^/]+?)(?:\.git)?\/?$/i); if (match && !$('entity-name').value) $('entity-name').value = match[1].replace(/[-_]+/g, ' '); } catch {} });
   $('editor').showModal();
   $('fields').querySelector('input, textarea')?.focus();
@@ -454,13 +734,24 @@ async function detail(eventId) {
     $('chain').textContent = error.message;
   }
 }
-$('team').addEventListener('change', async e => { state.team = e.target.value; state.project = team()?.projects[0]?.id || null; state.query = ''; rememberSelection(); choose(); await loadTeamChat(); await loadProject(); });
-$('projects').addEventListener('click', async e => { const b = e.target.closest('[data-project]'); if (b) { state.project = b.dataset.project; if (state.view === 'projects') state.view = 'overview'; state.query = ''; state.type = ''; rememberSelection(); choose(); await loadProject(); } });
+$('team').addEventListener('change', async e => { state.team = e.target.value; state.project = team()?.projects[0]?.id || null; state.query = ''; state.treeInitializedProject = null; rememberSelection(); choose(); await loadTeamChat(); await loadProject(); });
+$('projects').addEventListener('click', async e => { const b = e.target.closest('[data-project]'); if (b) { state.project = b.dataset.project; if (state.view === 'projects') state.view = 'overview'; state.query = ''; state.type = ''; state.treeInitializedProject = null; rememberSelection(); choose(); await loadProject(); } });
 $('browse-projects').addEventListener('click', () => { state.view = 'projects'; state.query = ''; state.type = ''; render(); });
-$('nav').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) { state.view = b.dataset.view; state.query = ''; state.type = ''; markViewSeen(); render(); } });
+$('nav').addEventListener('click', async e => { const b = e.target.closest('[data-view]'); if (b) { state.view = b.dataset.view; state.query = ''; state.type = ''; markViewSeen(); if (state.view === 'vault') await loadVault(); else render(); } });
 $('content').addEventListener('click', async e => {  const calendarNav = e.target.closest('[data-calendar-nav]')?.dataset.calendarNav;
+  const vaultEntry = e.target.closest('[data-vault-entry]');
+  if (vaultEntry) { showVaultDetail(vaultEntry.dataset.vaultEntry); return; }
+  const fullscreenButton = e.target.closest('[data-tree-fullscreen]');
+  if (fullscreenButton) { try { if (document.fullscreenElement) await document.exitFullscreen(); else await fullscreenButton.closest('.hierarchy-shell')?.requestFullscreen(); } catch { toast('Tam ekran açılamadı. Tarayıcı izinlerini kontrol edin.'); } return; }
+  const treeZoom = e.target.closest('[data-tree-zoom]');
+  if (treeZoom) { const action = treeZoom.dataset.treeZoom; setHierarchyScale(action === 'reset' ? 1 : state.treeScale + (action === 'in' ? .1 : -.1)); return; }
+  const treeBranch = e.target.closest('[data-tree-branch]');
+  if (treeBranch) { const id = treeBranch.dataset.treeBranch; if (state.treeExpanded.has(id)) state.treeExpanded.delete(id); else state.treeExpanded.add(id); rerenderHierarchy(id); return; }
+  if (e.target.closest('[data-tree-reset]')) { const tree = projectHierarchy(); state.treeExpanded = new Set(['__project__', ...tree.children.map(node => node.event.event_id)]); rerenderHierarchy('__project__'); return; }
+  const treeAdd = e.target.closest('[data-tree-add]');
+  if (treeAdd) { state.treeParent = treeAdd.dataset.treeAdd || null; editor('event'); if (state.treeParent && $('cause')) $('cause').value = state.treeParent; return; }
   const projectCard = e.target.closest('[data-project-open]');
-  if (projectCard) { state.project = projectCard.dataset.projectOpen; state.view = 'overview'; state.query = ''; state.type = ''; rememberSelection(); choose(); await loadProject(); return; }
+  if (projectCard) { state.project = projectCard.dataset.projectOpen; state.view = 'overview'; state.query = ''; state.type = ''; state.treeInitializedProject = null; rememberSelection(); choose(); await loadProject(); return; }
   if (calendarNav) { const cursor = state.calendarCursor || new Date(); if (calendarNav === 'today') state.calendarCursor = new Date(); else state.calendarCursor = new Date(cursor.getFullYear(), cursor.getMonth() + (calendarNav === 'next' ? 1 : -1), 1); render(); return; }
   const calendarDay = e.target.closest('[data-calendar-date]');
   if (calendarDay) {
@@ -473,10 +764,11 @@ $('content').addEventListener('click', async e => {  const calendarNav = e.targe
   const event = e.target.closest('[data-event]');
   if (event) { await detail(event.dataset.event); return; }
   const action = e.target.closest('[data-action]')?.dataset.action;
-  if (['team', 'project', 'event'].includes(action)) editor(action);
+  if (['team', 'project', 'event'].includes(action)) { if (action === 'event') state.treeParent = null; editor(action); }
   if (action === 'calendar' || action === 'task') plannerEditor(action);
   if (action === 'activity') { state.view = 'activity'; markViewSeen(); render(); }
   if (action === 'refresh') await loadProject();
+  if (action === 'vault-refresh') { state.vault = null; await loadVault(true); }
   if (action === 'refresh-members') { const button = e.target.closest('[data-action]'); setButtonBusy(button, true, 'Yenileniyor'); try { const result = await api(`/api/teams/${state.team}/members`, {}, 'POST'); toast(`${result.members.length} GitHub üyesi güncellendi.`); await reloadTeams(); } catch (error) { toast(error.message); } finally { setButtonBusy(button, false); } }
   if (action === 'local-setup') await showSetupGuide(state.team);
   const taskButton = e.target.closest('[data-task]');
@@ -516,6 +808,18 @@ document.querySelectorAll('[data-notification-section]').forEach(button => butto
 $('notifications-list').addEventListener('click', async event => {
   const setup = event.target.closest('[data-notification-setup]');
   if (setup) { $('close-notifications').click(); await showSetupGuide(setup.dataset.notificationSetup); return; }
+  const target = event.target.closest('[data-notification-team]');
+  if (target) {
+    state.team = target.dataset.notificationTeam;
+    state.project = target.dataset.notificationProject || state.teams.find(item => item.id === state.team)?.projects?.[0]?.id || null;
+    if (target.dataset.notificationView) state.view = target.dataset.notificationView;
+    if (target.dataset.notificationChatScope) state.chatScope = target.dataset.notificationChatScope;
+    rememberSelection(); choose();
+    await loadTeamChat(); await loadProject();
+    markViewSeen(); render(); $('close-notifications').click();
+    if (target.dataset.notificationEvent) await detail(target.dataset.notificationEvent);
+    return;
+  }
   const eventButton = event.target.closest('[data-notification-event]');
   if (eventButton) { $('close-notifications').click(); await detail(eventButton.dataset.notificationEvent); return; }
   const viewButton = event.target.closest('[data-notification-view]');
@@ -582,9 +886,9 @@ async function pollIncomingUpdates() {
   updatePollRunning = true;
   const selectedTeam = state.team, selectedProject = state.project;
   try {
-    const requests = [api('/api/teams'), api(`/api/teams/${selectedTeam}/chat`), api('/api/sync')];
+    const requests = [api('/api/teams'), api(`/api/teams/${selectedTeam}/chat`), api('/api/sync'), api('/api/notifications')];
     if (selectedProject) requests.push(api(`/api/teams/${selectedTeam}/projects/${selectedProject}`));
-    const results = await Promise.all(requests); let teams = results[0]; const teamChat = results[1], syncHealth = results[2], snapshot = selectedProject ? results[3] : null;
+    const results = await Promise.all(requests); let teams = results[0]; const teamChat = results[1], syncHealth = results[2], notificationWorkspace = results[3], snapshot = selectedProject ? results[4] : null;
     if (state.team !== selectedTeam || state.project !== selectedProject) return;
     const selected = teams.find(item => item.id === selectedTeam);
     if (selected?.github_repo && Date.now() - (state.memberRefresh[selectedTeam] || 0) > 5 * 60 * 1000) {
@@ -594,6 +898,7 @@ async function pollIncomingUpdates() {
     state.teams = teams;
     state.teamChat = teamChat;
     state.syncHealth = syncHealth;
+    state.notificationWorkspace = notificationWorkspace;
     if (snapshot) state.snapshot = snapshot;
     choose();
     const userIsTyping = document.activeElement?.matches('input, textarea, select') || $('editor').open || $('detail').open;
@@ -624,5 +929,14 @@ function renderConnections() {
     ['AvenoxBeyin', 'Özel / manuel aktarım', 'Kişisel vault otomatik okunmaz. Yalnızca gizlilikten geçirilmiş özet aktarılır.'],
     ['Obsidian', 'Markdown uyumlu', 'Bu memory reposunu Obsidian ile açabilirsin; SQLite ve generated görünümler paylaşılmaz.']
   ];
-  $('content').innerHTML = `<div class="connections">${cards.map(([name,status,text]) => `<section class="panel connection"><h3>${name}</h3><span class="badge">${status}</span><p>${text}</p></section>`).join('')}</div><div class="link-status">Bağlantı değiştiyse TeamBrain’i yeniden başlat. <button class="secondary" data-action="reindex">İndeksi yenile</button></div>`;
+  const update = state.updateInfo, installation = update?.installation;
+  const updateTone = update?.restart_required ? 'installed' : update?.available ? 'attention' : update?.offline ? 'offline' : 'current';
+  const updateLabel = !update ? 'KONTROL EDİLİYOR' : update.restart_required ? 'YENİDEN BAŞLAT' : update.available ? `${update.latest} HAZIR` : update.offline ? 'ÇEVRİMDIŞI' : 'GÜNCEL';
+  const updateText = !update ? 'GitHub sürüm bilgisi alınıyor.' : update.restart_required ? `TeamBrain ${update.current} diske kuruldu; çalışan dashboard hâlâ ${update.running_version}.` : update.available ? `${update.current} → ${update.latest}. ${installation?.dirty ? 'Uygulama klasöründe yerel değişiklik olduğu için güvenli kurulum durduruldu.' : installation?.supported ? 'Resmi yayın doğrulanıp fast-forward olarak kurulabilir.' : installation?.reason || 'Sürüm sayfasından elle güncelleyin.'}` : update.offline ? 'GitHub’a erişilemedi; mevcut sürüm çalışmaya devam ediyor.' : `TeamBrain ${update.current} en son yayınla eşleşiyor.`;
+  const updateActions = `<div class="update-actions"><button class="secondary" type="button" data-update-check>Güncellemeleri kontrol et</button>${update?.available && installation?.supported && !installation?.dirty ? '<button class="primary" type="button" data-update-apply>Şimdi güncelle</button>' : ''}${update?.restart_required ? '<button class="primary" type="button" data-update-restart>Yeniden başlat</button>' : ''}<button class="secondary" type="button" data-update-auto>${update?.automatic ? 'Otomatik güncellemeyi kapat' : 'Otomatik güncellemeyi aç'}</button></div>`;
+  $('content').innerHTML = `<section class="panel update-panel ${updateTone}"><div><span class="eyebrow">UYGULAMA GÜNCELLEMELERİ</span><h3>TeamBrain’i güncel ve güvenli tut</h3><p>${escape(updateText)}</p></div><span class="badge">${escape(updateLabel)}</span>${updateActions}</section><div class="connections">${cards.map(([name,status,text]) => `<section class="panel connection"><h3>${name}</h3><span class="badge">${status}</span><p>${text}</p></section>`).join('')}</div><div class="link-status">Bağlantı değiştiyse TeamBrain’i yeniden başlat. <button class="secondary" data-action="reindex">İndeksi yenile</button></div>`;
+  document.querySelector('.update-panel [data-update-check]')?.addEventListener('click', event => { const button = event.currentTarget; setButtonBusy(button, true, 'Kontrol ediliyor'); checkForUpdate(true).finally(() => setButtonBusy(button, false)); });
+  document.querySelector('.update-panel [data-update-apply]')?.addEventListener('click', event => applyAvailableUpdate(event.currentTarget));
+  document.querySelector('.update-panel [data-update-restart]')?.addEventListener('click', event => restartAfterUpdate(event.currentTarget));
+  document.querySelector('.update-panel [data-update-auto]')?.addEventListener('click', event => setAutomaticUpdates(!state.updateInfo?.automatic, event.currentTarget));
 }

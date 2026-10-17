@@ -72,6 +72,35 @@ test('team chat is isolated from project chat and Obsidian event markdown', () =
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+test('vault aggregates every team and project without changing canonical records', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-vault-'));
+  try {
+    const w = new Workspace(root), studio = w.createTeam('Studio'), personal = w.createTeam('Kişisel', undefined, { local_only: true });
+    const robot = w.createProject(studio.id, 'Robot'), notes = w.createProject(personal.id, 'Notlar');
+    w.addEvent(studio.id, robot.id, { title: 'Motor kararı', body: 'Fırçasız motor.', event_type: 'decision.accepted' });
+    w.teamChat(studio.id, { message: 'Karar kaydedildi.', actor: 'ada' });
+    w.addTask(personal.id, notes.id, { title: 'Kaynakları tara', assignee: 'emre' });
+    w.addCalendar(personal.id, notes.id, { title: 'Haftalık değerlendirme', date: '2026-10-19' });
+    w.importDocument(studio.id, robot.id, { filename: 'spec.txt', data: Buffer.from('Motor ayrıntıları') });
+    fs.mkdirSync(path.join(root, 'shared', '10-decisions'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'shared', '10-decisions', 'motor.md'), '# Motor standardı\n\nOrtak karar.');
+    const vault = w.vault();
+    assert.equal(vault.teams.length, 2);
+    assert.equal(vault.shared[0].title, 'Motor standardı');
+    assert.equal(vault.teams.find(team => team.id === studio.id).chat.length, 1);
+    assert.equal(vault.teams.find(team => team.id === studio.id).projects[0].events[0].title, 'Motor kararı');
+    assert.equal(vault.teams.find(team => team.id === studio.id).projects[0].documents[0].filename, 'spec.txt');
+    assert.match(vault.teams.find(team => team.id === studio.id).projects[0].documents[0].body, /Motor ayrıntıları/);
+    assert.equal(vault.teams.find(team => team.id === personal.id).projects[0].planner.tasks.length, 1);
+    assert.equal(vault.teams.find(team => team.id === personal.id).projects[0].planner.calendar.length, 1);
+    const notifications = w.notifications();
+    assert.deepEqual(notifications.teams.map(team => team.id).sort(), [personal.id, studio.id].sort(), 'general notifications must span every repository group');
+    assert.equal(notifications.teams.find(team => team.id === studio.id).projects[0].events[0].title, 'Motor kararı');
+    assert.equal(notifications.teams.find(team => team.id === personal.id).projects[0].planner.tasks.length, 1);
+    assert.equal('documents' in notifications.teams.find(team => team.id === studio.id).projects[0], false, 'notification polling must not return document contents');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('document imports become traceable project Markdown without retaining binaries', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-document-'));
   try {
@@ -175,6 +204,7 @@ test('dashboard HTTP onboarding, input checks, security headers and cross-origin
     assert.equal(health.ok, true);
     assert.equal(health.sync.enabled, false);
     assert.equal((await fetch(base + '/api/sync')).status, 200);
+    assert.equal((await fetch(base + '/vault.css')).status, 200);
     assert.equal((await post('/api/teams', { name: 'Bad' }, { Origin: 'https://evil.example' })).status, 403);
     const hostStatus = await new Promise((resolve, reject) => {
       require('node:http').get(base + '/api/teams', { headers: { Host: 'evil.example' } }, res => { res.resume(); resolve(res.statusCode); }).on('error', reject);
@@ -197,6 +227,11 @@ test('dashboard HTTP onboarding, input checks, security headers and cross-origin
     assert.equal((await post(url + '/chat', { message: '' })).status, 400);
     const snapshot = await (await fetch(base + url)).json();
     assert.equal(snapshot.total, 3);
+    const vault = await (await fetch(base + '/api/vault')).json();
+    assert.equal(vault.teams[0].projects[0].total, 3);
+    const notifications = await (await fetch(base + '/api/notifications')).json();
+    assert.equal(notifications.teams[0].projects[0].events.length, 3);
+    assert.equal('documents' in notifications.teams[0].projects[0], false, 'notification polling must not return document contents');
     assert.equal((await post(url + '/reindex', {})).status, 200);
     assert.equal((await post('/api/teams', { name: 'a'.repeat(70000) })).status, 400);
   } finally { await new Promise(resolve => server.close(resolve)); fs.rmSync(root, { recursive: true, force: true }); }

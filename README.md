@@ -30,16 +30,22 @@ The wizard asks for:
 1. the exact private GitHub memory repository URL;
 2. the local memory directory;
 3. the user's stable GitHub login / TeamBrain actor identity;
-4. whether automatic synchronization is enabled;
-5. whether TeamBrain starts automatically with Windows;
-6. the team and project names;
-7. one final confirmation showing every change before anything is installed.
+4. every AI coding tool used on the repository (Codex/ChatGPT desktop, Claude,
+   Gemini, GitHub Copilot, Cursor, or a custom instruction file for another tool);
+5. whether automatic synchronization is enabled;
+6. whether TeamBrain starts automatically with Windows;
+7. the team and project names;
+8. one final confirmation showing every change before anything is installed.
 
 After confirmation it verifies/clones the memory repository, creates or reuses the
 team and project, installs a reviewed Git `post-commit` hook, and adds one managed
-TeamBrain block to the code repository's `AGENTS.md`. Existing instructions are
-preserved. Re-running setup updates the managed integration instead of duplicating
-it.
+TeamBrain block to every selected tool's native repository instruction file.
+Codex and ChatGPT desktop share `AGENTS.md`; Claude uses `CLAUDE.md`; Gemini uses
+`GEMINI.md`; Copilot uses `.github/copilot-instructions.md`; and Cursor uses an
+always-on `.cursor/rules/teambrain.mdc` rule. Existing instructions are preserved.
+The Git hook remains the tool-independent fallback, so commits are captured even
+when several AI tools or a tool without instruction-file support is used. Re-running
+setup updates each managed integration instead of duplicating it.
 
 For a reviewed non-interactive deployment, supply every value and `--yes`:
 
@@ -49,6 +55,7 @@ node --experimental-sqlite C:\TeamBrain\bin\teambrain.js setup `
   --url https://github.com/ORG/PRIVATE-MEMORY.git `
   --memory-root C:\TeamBrain-memory `
   --actor GITHUB_LOGIN `
+  --ai-tools codex,chatgpt,claude,gemini,copilot,cursor `
   --team-name TEAM `
   --project-name PRODUCT `
   --auto-sync true `
@@ -58,6 +65,8 @@ node --experimental-sqlite C:\TeamBrain\bin\teambrain.js setup `
 
 `--yes` is for automation that has already presented and received approval for the
 exact choices. An AI installer must not use it to bypass the confirmation step.
+Use `--ai-tools other --ai-instruction-files path/to/tool-rules.md` for another AI
+tool; custom paths must stay inside the code repository and end in `.md` or `.mdc`.
 
 ## AI installer contract
 
@@ -131,6 +140,28 @@ and its 30-second synchronization loop. If the user approves Windows startup dur
 dashboard automatically at sign-in. Without that explicit approval it does not add
 a service, scheduled task, or startup application. Merely opening a code repository
 or editing/saving a file does not upload anything.
+
+### Application updates
+
+Open **Bağlantılar → Uygulama güncellemeleri** to check GitHub releases. When a
+new release exists, the dashboard shows a colored update banner and offers a
+one-click install followed by a one-click restart. Automatic application updates
+are disabled by default and can be enabled from the same card.
+
+For safety, in-app installation works only from a clean `main` checkout whose
+`origin` is exactly the official `BIRDEV-STUDIO/TeamBrain` repository. It fetches
+the published release tag and applies it with `git merge --ff-only`; local changes,
+forks, divergent history, and non-release refs are never overwritten. This setting
+is stored locally in the selected memory workspace and does not affect memory-sync
+preferences.
+
+The same operations are available in the CLI:
+
+```powershell
+node --experimental-sqlite bin/teambrain.js update --check --root C:\TeamBrain-memory
+node --experimental-sqlite bin/teambrain.js update --apply --root C:\TeamBrain-memory
+node --experimental-sqlite bin/teambrain.js update --automatic true --root C:\TeamBrain-memory
+```
 
 ### Personal projects without GitHub
 
@@ -341,6 +372,8 @@ node --experimental-sqlite bin/teambrain.js connect project --repo C:\path\to\yo
 node --experimental-sqlite bin/teambrain.js publish --root C:\TeamBrain --project robotics --summary "Tests passed" --sources "commit:abc" --privacy-reviewed true
 node --experimental-sqlite bin/teambrain.js handoff --root C:\TeamBrain --summary "Review the pending receipt"
 node --experimental-sqlite bin/teambrain.js update --check
+node --experimental-sqlite bin/teambrain.js update --apply --root C:\TeamBrain-memory
+node --experimental-sqlite bin/teambrain.js update --automatic true --root C:\TeamBrain-memory
 ```
 
 `publish` writes one personal-data-reviewed receipt to `shared/90-receipts/pending/`. A human review must promote it to a canonical decision, project, or knowledge record. Raw conversations are never a publish input. During connection setup the user chooses manual or background synchronization; background mode is restricted to the selected memory repository's `shared/` and `teams/` records and pauses on conflicts.

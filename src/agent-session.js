@@ -5,6 +5,41 @@ const {createEvent}=require('./event'); const {writeEvent}=require('./store'); c
 const {planner}=require('./planner'); const {SyncWorker}=require('./sync-worker');
 
 const APPROVED=['00-charter','10-decisions','20-projects','30-knowledge'];
+const AI_TOOL_TARGETS={
+  codex:['AGENTS.md'],
+  chatgpt:['AGENTS.md'],
+  claude:['CLAUDE.md'],
+  gemini:['GEMINI.md'],
+  copilot:[path.join('.github','copilot-instructions.md')],
+  cursor:[path.join('.cursor','rules','teambrain.mdc')]
+};
+const AI_TOOL_ALIASES={gpt:'chatgpt','gpt-desktop':'chatgpt','chatgpt-desktop':'chatgpt','github-copilot':'copilot'};
+function selectedAiTools(value) {
+  const input=Array.isArray(value)?value:String(value||'codex,claude').split(',');
+  const tools=[...new Set(input.map(item=>String(item).trim().toLowerCase()).filter(Boolean).map(item=>AI_TOOL_ALIASES[item]||item))];
+  const unknown=tools.filter(item=>item!=='other'&&!AI_TOOL_TARGETS[item]);
+  if(unknown.length) throw new Error(`Unsupported AI tool(s): ${unknown.join(', ')}. Choose codex, chatgpt, claude, gemini, copilot, cursor, or other.`);
+  return tools;
+}
+function safeCustomTargets(repo,value) {
+  const values=Array.isArray(value)?value:String(value||'').split(',');
+  return [...new Set(values.map(item=>String(item).trim()).filter(Boolean).map(item=>{
+    if(path.isAbsolute(item)) throw new Error('Custom AI instruction files must be relative to the code repository.');
+    const target=path.resolve(repo,item),relative=path.relative(repo,target);
+    if(!relative||relative.startsWith('..')||path.isAbsolute(relative)) throw new Error(`Custom AI instruction file escapes the code repository: ${item}`);
+    if(!/\.(?:md|mdc)$/i.test(target)) throw new Error(`Custom AI instruction file must end in .md or .mdc: ${item}`);
+    return target;
+  }))];
+}
+function instructionPlan(options) {
+  const repo=path.resolve(options.repo||process.cwd()),tools=selectedAiTools(options['ai-tools']);
+  const targets=tools.flatMap(tool=>AI_TOOL_TARGETS[tool]||[]).map(file=>path.join(repo,file));
+  const customTargets=safeCustomTargets(repo,options['ai-instruction-files']);
+  if(tools.includes('other')&&!customTargets.length) throw new Error('AI tool "other" requires --ai-instruction-files with one or more repository-relative .md/.mdc paths.');
+  const files=[...new Set([...targets,...customTargets])];
+  if(!files.length) throw new Error('Select at least one AI tool or custom instruction file.');
+  return {repo,tools,files};
+}
 function projectRoot(root,team,project) { return new Workspace(root).projectPath(validId(team),validId(project)); }
 function approvedContext(root,maxChars=12000) {
   let remaining=Math.max(1000,Math.min(Number(maxChars)||12000,50000)); const documents=[];
@@ -39,10 +74,16 @@ function instructionBlock(options) {
 function installManagedFile(file,block) {
   const start='<!-- teambrain:managed:start -->', end='<!-- teambrain:managed:end -->'; let current=fs.existsSync(file)?fs.readFileSync(file,'utf8'):'';
   const a=current.indexOf(start), b=current.indexOf(end); if(a>=0&&b>=a) current=current.slice(0,a)+block+current.slice(b+end.length); else current=`${current.trim()}${current.trim()?'\n\n':''}${block}\n`;
+  fs.mkdirSync(path.dirname(file),{recursive:true});
   fs.writeFileSync(file,current.endsWith('\n')?current:`${current}\n`); return file;
 }
 function installInstructions(options) {
-  const repo=path.resolve(options.repo||process.cwd()),block=instructionBlock(options),file=installManagedFile(path.join(repo,'AGENTS.md'),block),claudeFile=installManagedFile(path.join(repo,'CLAUDE.md'),block);
-  return {installed:true,file,claude_file:claudeFile};
+  const {repo,tools,files:plannedFiles}=instructionPlan(options),block=instructionBlock(options);
+  const files=plannedFiles.map(file=>{
+    const cursorRule=file===path.join(repo,'.cursor','rules','teambrain.mdc');
+    const targetBlock=cursorRule&&!fs.existsSync(file)?`---\ndescription: TeamBrain shared context and session protocol\nglobs:\nalwaysApply: true\n---\n\n${block}`:block;
+    return installManagedFile(file,targetBlock);
+  });
+  return {installed:true,tools,files,file:files.find(file=>path.basename(file).toLowerCase()==='agents.md')||files[0],claude_file:files.find(file=>path.basename(file).toLowerCase()==='claude.md')||null};
 }
-module.exports={approvedContext,startSession,finishSession,installInstructions,instructionBlock};
+module.exports={approvedContext,startSession,finishSession,installInstructions,instructionBlock,selectedAiTools,instructionPlan};

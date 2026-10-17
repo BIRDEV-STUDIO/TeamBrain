@@ -37,6 +37,18 @@ test('notification tracker keeps unread items until their menu is seen', () => {
   assert.equal(tracker.counts('team-a').team, 0, 'the same item must not become unread twice');
 });
 
+test('notification tracker aggregates and clears unread changes across repositories', () => {
+  const tracker = new NotificationTracker(storage());
+  const scopes = ['team:studio:project:robot', 'team:studio:project:web'];
+  tracker.observe(scopes[0], [{ category: 'activity', id: 'robot-old', actor: 'ada' }], ['emre']);
+  tracker.observe(scopes[1], [{ category: 'tasks', id: 'web-old', actor: 'ada' }], ['emre']);
+  tracker.observe(scopes[0], [{ category: 'activity', id: 'robot-old', actor: 'ada' }, { category: 'activity', id: 'robot-new', actor: 'ada' }], ['emre']);
+  tracker.observe(scopes[1], [{ category: 'tasks', id: 'web-old', actor: 'ada' }, { category: 'tasks', id: 'web-new', actor: 'ada' }], ['emre']);
+  assert.equal(tracker.totalUnread(scopes), 2);
+  tracker.markSeenMany(scopes, ['activity', 'tasks']);
+  assert.equal(tracker.totalUnread(scopes), 0);
+});
+
 test('setup guide builds a safe client fallback when an older dashboard omits agent_prompt', () => {
   const prompt = buildAgentSetupPrompt({
     memory_repository: 'https://github.com/acme/memory.git',

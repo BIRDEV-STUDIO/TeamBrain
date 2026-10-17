@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Workspace } = require('./workspace');
 const { SyncWorker } = require('./sync-worker');
-const { checkForUpdate } = require('./update-check');
-const assets = { '/': ['index.html', 'text/html'], '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/app.css': ['app.css', 'text/css'], '/projects.css': ['projects.css', 'text/css'], '/notifications.css': ['notifications.css', 'text/css'], '/notifications.js': ['notifications.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'] };
+const { UpdateService } = require('./updater');
+const assets = { '/': ['index.html', 'text/html'], '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/app.css': ['app.css', 'text/css'], '/projects.css': ['projects.css', 'text/css'], '/notifications.css': ['notifications.css', 'text/css'], '/tree.css': ['tree.css', 'text/css'], '/vault.css': ['vault.css', 'text/css'], '/notifications.js': ['notifications.js', 'text/javascript'], '/tree-model.js': ['tree-model.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'] };
 
 function guard(req) {
   const expected = `127.0.0.1:${req.socket.localPort}`;
@@ -28,9 +28,10 @@ async function multipartBody(req) {
   const headers = body.slice(start + boundary.length + 2, headerEnd).toString('utf8'); const name = headers.match(/name="([^"]+)"/i)?.[1]; const filename = headers.match(/filename="([^"]*)"/i)?.[1]; if (name !== 'file' || !filename) throw new Error('Dosya bulunamadı.');
   return { filename: path.basename(filename), data: body.slice(headerEnd + 4, end - 2) };
 }
-function createDashboardServer(root) {
+function createDashboardServer(root, options = {}) {
   const workspace = new Workspace(root);
   const syncWorker=new SyncWorker(root); syncWorker.start();
+  const updateService = options.updateService || new UpdateService(root);
   const withSync = async result => ({ ...result, sync: await syncWorker.tick() });
   const server=http.createServer(async (req, res) => {
     const send = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); };
@@ -45,9 +46,14 @@ function createDashboardServer(root) {
         res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8` });
         res.end(fs.readFileSync(path.join(__dirname, '..', 'public', file))); return;
       }
-      if (req.method === 'GET' && url.pathname === '/api/update') { send(200, await checkForUpdate()); return; }
+      if (req.method === 'GET' && url.pathname === '/api/update') { send(200, await updateService.check(url.searchParams.get('refresh') === '1')); return; }
+      if (req.method === 'POST' && url.pathname === '/api/update/settings') { const input = await jsonBody(req); const settings = updateService.configure(input.automatic); const result = settings.automatic ? await updateService.maybeAutoApply() : await updateService.check(false); send(200, result || await updateService.check(false)); return; }
+      if (req.method === 'POST' && url.pathname === '/api/update/apply') { await jsonBody(req); send(200, await updateService.apply()); return; }
+      if (req.method === 'POST' && url.pathname === '/api/update/restart') { await jsonBody(req); if (typeof options.restart !== 'function') throw new Error('Bu oturum otomatik yeniden başlatmayı desteklemiyor.'); send(202, { restarting: true }); setTimeout(options.restart, 150); return; }
       if (req.method === 'GET' && url.pathname === '/api/identity') { send(200, workspace.identity()); return; }
       if (req.method === 'GET' && url.pathname === '/api/sync') { send(200, syncWorker.status()); return; }
+      if (req.method === 'GET' && url.pathname === '/api/notifications') { send(200, workspace.notifications()); return; }
+      if (req.method === 'GET' && url.pathname === '/api/vault') { send(200, workspace.vault()); return; }
       if (req.method === 'GET' && url.pathname === '/api/health') { const sync=syncWorker.status(); send(sync.state==='attention-required'?503:200,{ok:sync.state!=='attention-required',identity:workspace.identity(),sync}); return; }
       if (url.pathname === '/api/teams') {
         if (req.method === 'GET') { send(200, workspace.teams()); return; }
@@ -81,6 +87,6 @@ function createDashboardServer(root) {
       }
       send(404, { error: 'Bulunamadı.' });
     } catch (error) { send(400, { error: error.message }); }
-  }); server.on('close',()=>syncWorker.stop()); return server;
+  }); server.on('close',()=>{ syncWorker.stop(); updateService.stop(); }); return server;
 }
 module.exports = { createDashboardServer, guard, jsonBody };

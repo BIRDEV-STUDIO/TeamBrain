@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 2026-10-18
+
+- Added a workspace-wide Kasa and a causal, zoomable knowledge tree without changing canonical project records.
+- Added cross-repository general notifications with independent unread state and direct navigation to the originating team and project.
+- Added a visible dashboard update center with manual checks, opt-in automatic installation, one-click restart, and CLI controls.
+- Automatic application updates accept only official `BIRDEV-STUDIO/TeamBrain` releases and stop on a dirty checkout, non-`main` branch, non-official remote, or non-fast-forward history.
+- Fixed semantic version comparison for prerelease-to-stable upgrades and added a lightweight notification API that excludes imported document contents.
+- Setup now asks which AI coding tools are used and can install the same
+  idempotent TeamBrain session contract for Codex/ChatGPT desktop, Claude,
+  Gemini, GitHub Copilot, Cursor, and explicit repository-local instruction
+  files for other tools. The Git commit hook remains provider-independent.
 
 - Made automatic memory delivery durable and observable: local commit before network
   transfer, exclusive synchronization lock, periodic retry after runtime enablement,

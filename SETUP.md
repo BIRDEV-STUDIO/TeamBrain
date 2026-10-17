@@ -9,13 +9,23 @@ application and running `npm.cmd install` on Windows, the AI must run:
 `node --experimental-sqlite C:\TeamBrain\bin\teambrain.js setup --repo C:\path\to\code`
 
 The interactive wizard confirms the exact private memory repository, local path,
-actor, automatic sync, Windows startup, team and project before installing any
-hook or managed project instruction. This is the preferred path because it combines
+actor, all AI tools used on the repository, automatic sync, Windows startup, team
+and project before installing any hook or managed project instruction. Codex and
+ChatGPT desktop use `AGENTS.md`; Claude, Gemini, Copilot, and Cursor receive their
+native repository instruction files. An `other` choice accepts explicit, repository-
+relative `.md`/`.mdc` instruction paths. This is the preferred path because it combines
 the steps below without silently guessing repository boundaries.
 
 The dashboard-generated command uses the actual TeamBrain checkout path, so users
 may clone the public application outside `C:\TeamBrain`; the paths below are only
 Windows examples.
+
+After installation, application releases are managed under **Bağlantılar →
+Uygulama güncellemeleri**. Manual checking is always available. Opt-in automatic
+updates install only signed-in Git access to the official public TeamBrain remote,
+only on a clean `main` checkout, and only as a fast-forward to a published release
+tag. The dashboard asks for a restart after installation; private memory data is
+not part of the application update.
 
 ## Personal, local-only setup
 
@@ -37,7 +47,7 @@ and trust the new hook once with `/hooks`, then start the dashboard with
 project under **Kişisel Projeler**. The hook stores changed paths and repository
 metadata only. Re-running the reviewed setup updates a stale managed Git hook target,
 verifies the exact code and memory remotes, checks the actor identity, installs the
-managed `AGENTS.md` and `CLAUDE.md` blocks, and enables automatic sync only after all checks pass.
+managed instruction blocks for every selected AI tool, and enables automatic sync only after all checks pass.
 Existing memory-repository changes must be reviewed first; setup refuses to enable
 automatic sync over a dirty pre-existing memory checkout.
 It does not copy prompts, transcripts, patches, or file contents.

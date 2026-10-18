@@ -22,7 +22,10 @@ function runGit(appRoot, args) {
   const output = execFileSync('git', ['-C', appRoot, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60000 });
   return args[0] === 'status' ? output.replace(/[\r\n]+$/, '') : output.trim();
 }
-const PERSONAL_INSTRUCTION_FILES = new Set(['AGENTS.md', 'CLAUDE.md', 'GEMINI.md', '.github/copilot-instructions.md', '.cursor/rules/teambrain.mdc']);
+const PERSONAL_INSTRUCTION_FILES = new Set([
+  'AGENTS.md', 'CLAUDE.md', 'GEMINI.md', '.github/copilot-instructions.md', '.cursor/rules/teambrain.mdc',
+  '.codex/hooks.json', '.claude/settings.local.json', '.gemini/settings.json', '.github/copilot/settings.local.json'
+]);
 function dirtyApplicationFiles(output) {
   return String(output || '').split(/\r?\n/).filter(Boolean).map(line => line.slice(3).replace(/^"|"$/g, '').replace(/\\/g, '/')).filter(file => !PERSONAL_INSTRUCTION_FILES.has(file));
 }

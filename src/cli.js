@@ -11,6 +11,7 @@ const onboarding = require('./setup');
 const repos = require('./repo-registry');
 const { Workspace } = require('./workspace');
 const codexCapture = require('./codex-capture');
+const agentHooks = require('./agent-hooks');
 const { SyncWorker } = require('./sync-worker');
 const repair = require('./repair');
 const { UpdateService } = require('./updater');
@@ -37,7 +38,9 @@ async function run(args) {
   if (command === 'connect project') { const hook=automation.installHook(options); const instructions=options['install-instructions']===true||options['install-instructions']==='true'?agentSession.installInstructions(options):null; print({hook,instructions}); return; }
   if (command === 'capture commit') { print(await automation.captureCommit(options)); return; }
   if (command === 'capture codex') { const result=codexCapture.captureCodex(options); if(options.quiet!==true&&options.quiet!=='true') print(result); return; }
+  if (command === 'capture agent') { const result=codexCapture.captureAgent(options); if(options.quiet!==true&&options.quiet!=='true') print(result); return; }
   if (command === 'install codex-hook') { print(codexCapture.installCodexHook(options)); return; }
+  if (command === 'install agent-hooks') { print(agentHooks.installAgentHooks(options)); return; }
   if (command === 'session start') { print(await agentSession.startSession(options)); return; }
   if (command === 'session finish') { print(await agentSession.finishSession(options)); return; }
   if (command === 'repair reassign-events') { print(repair.reassignGitEvents({...options,root:workspace})); return; }

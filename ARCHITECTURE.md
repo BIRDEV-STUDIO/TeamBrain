@@ -41,6 +41,10 @@ Creation writes the canonical file first with exclusive-create semantics, then i
 - `src/git-sync.js`: explicit Git status/pull/push adapter. `src/sync-worker.js` provides opt-in background fetch/rebase/commit/push for the selected memory repository and pauses on Git attention states.
 - `src/setup.js`: confirmed end-to-end installer for the private memory repository, code repository, actor identity, project mapping, Git hook, managed agent instructions and optional Windows startup.
 - `src/agent-session.js`: bounded approved-context injection, assigned-task retrieval and privacy-reviewed Markdown outcome capture for instruction-aware terminal/desktop agents.
+- `src/agent-hooks.js` and `src/codex-capture.js`: provider-neutral workspace
+  snapshot capture plus project-local lifecycle adapters for Codex/ChatGPT,
+  Claude Code, Gemini CLI and Copilot CLI. Payload prompts and transcript files
+  are deliberately ignored.
 - `src/workspace.js`: team/project discovery, scoped operations and transactional dashboard reindex.
 - `src/dashboard-server.js`: loopback dashboard/API, exact asset allowlist, origin/Host checks, bounded JSON requests and content security policy.
 - `src/local-api.js`: legacy single-project API; the CLI now launches the workspace dashboard instead.

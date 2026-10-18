@@ -44,6 +44,14 @@ test('official checkout remains updateable with local AGENTS and Claude instruct
     git('remote', 'add', 'origin', 'https://github.com/BIRDEV-STUDIO/TeamBrain.git'); git('add', '.'); git('commit', '-m', 'initial');
     fs.appendFileSync(path.join(root, 'AGENTS.md'), '\n# Private local integration\n');
     fs.writeFileSync(path.join(root, 'CLAUDE.md'), '# Private local instructions\n');
+    fs.mkdirSync(path.join(root, '.codex'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.codex', 'hooks.json'), '{"hooks":{}}\n');
+    fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.claude', 'settings.local.json'), '{"hooks":{}}\n');
+    fs.mkdirSync(path.join(root, '.gemini'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.gemini', 'settings.json'), '{"hooks":{}}\n');
+    fs.mkdirSync(path.join(root, '.github', 'copilot'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.github', 'copilot', 'settings.local.json'), '{"hooks":{}}\n');
     const result = inspectInstallation(root);
     assert.equal(result.supported, true);
     assert.equal(result.dirty, false);

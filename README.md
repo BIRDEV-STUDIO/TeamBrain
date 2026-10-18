@@ -399,15 +399,31 @@ The `actor` value is the stable member identity in receipts and handoffs; never 
 
 `connect project` installs a Git `post-commit` hook. Every commit made by terminal AI or a human becomes a `change.recorded` event in the selected TeamBrain project; the background worker then sends it to GitHub while the dashboard is running and automatic synchronization is enabled. Only commit metadata, changed paths, and file statistics are captured, never patch bodies or raw terminal conversations.
 
-### Local Codex second-brain capture
+### Automatic AI work capture
 
-Codex work can be captured locally without GitHub and without keeping the dashboard process open:
+Install lifecycle capture for the AI tools selected during setup:
+
+```powershell
+node --experimental-sqlite C:\TeamBrain\bin\teambrain.js install agent-hooks --repo C:\path\to\code --memory-root C:\TeamBrain-memory --ai-tools codex,chatgpt,claude,gemini,copilot
+```
+
+The setup flow installs project-local native hooks for Codex/ChatGPT desktop,
+Claude Code, Gemini CLI, and GitHub Copilot CLI while preserving unrelated hook
+configuration. Codex hooks require the tool's normal review/trust step. Each
+working directory is mapped automatically to a project under the local-only
+**Kişisel Projeler** team. A `change.recorded` event is written only when the Git
+state, commit, or local file manifest changes. Hooks record changed paths and
+repository metadata; they never copy prompts, transcripts, patches, or file
+contents. Local-only projects are excluded from TeamBrain's Git synchronization
+paths. Cursor and custom tools still receive managed instructions, and every tool
+is covered by the provider-independent Git post-commit hook; they are not claimed
+as native lifecycle capture until a reviewed adapter is installed.
+
+The older global Codex-only command remains as a compatibility alias:
 
 ```powershell
 node --experimental-sqlite C:\TeamBrain\bin\teambrain.js install codex-hook --root C:\TeamBrain-memory --teambrain-root C:\TeamBrain
 ```
-
-The installer preserves existing Codex hooks and adds `SessionStart`, `UserPromptSubmit`, `Stop`, and `SessionEnd` handlers. `UserPromptSubmit` also restores the baseline when a client misses `SessionStart`, so a later turn can still create the project-scoped Markdown record. On the next Codex session, review and trust the changed hook with `/hooks`. Each working directory is mapped automatically to a project under the local-only **Kişisel Projeler** team. A `change.recorded` event is written only when the Git state, commit, or local file manifest changes. The hook records changed paths and repository metadata; it never copies prompts, transcripts, patches, or file contents. Local-only projects are excluded from TeamBrain's Git synchronization paths.
 
 The dashboard can create a team directly from `＋ Ekip oluştur`. Enter the team's exact GitHub repository URL; TeamBrain verifies that the repository is reachable, derives the team name when it is left blank, prevents the same repository from being linked twice, and stores the link in the team's metadata. All projects and chat messages created under that team remain isolated under that GitHub-backed team workspace. The repository must already exist and the current user must have Git access; TeamBrain does not silently create repositories or bypass GitHub permissions.
 

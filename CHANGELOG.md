@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Replaced the Codex-only workspace snapshot path with a provider-neutral agent
+  capture command and project-local lifecycle hook installers for Codex/ChatGPT
+  desktop, Claude Code, Gemini CLI, and GitHub Copilot CLI.
+- Fixed Codex hook installation for the current command-string schema; legacy
+  `command` plus `args` entries are replaced idempotently instead of launching a
+  bare Node process that can leak hook JSON into the terminal.
+- Kept Cursor and custom tools on the provider-independent Git post-commit plus
+  managed-instruction path when no reviewed native lifecycle adapter is installed.
+
 ## 0.6.2 — 2026-10-18
 
 - Preserve Git porcelain status spacing so local managed AI instruction files are correctly excluded from application update checks.

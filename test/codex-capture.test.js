@@ -6,7 +6,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { bootstrap } = require('../src/protocol');
-const { captureCodex, installCodexHook } = require('../src/codex-capture');
+const { captureAgent, captureCodex, installCodexHook } = require('../src/codex-capture');
+const { installAgentHooks } = require('../src/agent-hooks');
 const { Workspace } = require('../src/workspace');
 
 function git(root, args) { return execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim(); }
@@ -73,7 +74,64 @@ test('Codex hook installer preserves existing hooks and is idempotent', () => {
     assert.equal(hooks.Stop.length, 1);
     assert.equal(hooks.SessionEnd.length, 1);
     assert.equal(hooks.SessionStart[0].hooks[0].command, 'existing');
+    assert.match(hooks.SessionStart[1].hooks[0].command, /capture" "agent/);
+    assert.equal(hooks.SessionStart[1].hooks[0].args, undefined);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('shared agent capture normalizes provider events and keeps provider sessions isolated', () => {
+  const memory = temporary('memory-agent-');
+  const repo = temporary('repo-agent-');
+  try {
+    bootstrap(memory, 'memory');
+    git(repo, ['init']);
+    git(repo, ['config', 'user.email', 'test@example.com']);
+    git(repo, ['config', 'user.name', 'Test']);
+    fs.writeFileSync(path.join(repo, 'app.txt'), 'before\n');
+    git(repo, ['add', 'app.txt']);
+    git(repo, ['commit', '-m', 'Initial']);
+    captureAgent({ root: memory, provider: 'claude' }, { session_id: 'same', cwd: repo, hook_event_name: 'SessionStart' });
+    captureAgent({ root: memory, provider: 'gemini' }, { session_id: 'same', cwd: repo, hook_event_name: 'SessionStart' });
+    fs.writeFileSync(path.join(repo, 'app.txt'), 'after\n');
+    const claude = captureAgent({ root: memory, provider: 'claude' }, { session_id: 'same', cwd: repo, hook_event_name: 'Stop' });
+    const gemini = captureAgent({ root: memory, provider: 'gemini' }, { session_id: 'same', cwd: repo, hook_event_name: 'AfterAgent' });
+    assert.equal(claude.captured, true);
+    assert.equal(gemini.captured, true);
+    const events = new Workspace(memory).snapshot(claude.team_id, claude.project_id).events;
+    assert.deepEqual(new Set(events.map(event => event.source)), new Set(['claude-hook', 'gemini-hook']));
+  } finally {
+    fs.rmSync(memory, { recursive: true, force: true });
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('agent hook installer preserves existing configs and installs supported project-local hooks', () => {
+  const memory = temporary('memory-installers-');
+  const repo = temporary('repo-installers-');
+  try {
+    bootstrap(memory, 'memory');
+    git(repo, ['init']);
+    fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(repo, '.claude', 'settings.local.json'), JSON.stringify({ theme: 'dark' }));
+    const options = { repo, 'memory-root': memory, 'teambrain-root': path.resolve(__dirname, '..'), 'ai-tools': 'codex,chatgpt,claude,gemini,copilot,cursor' };
+    const first = installAgentHooks(options);
+    const second = installAgentHooks(options);
+    assert.equal(first.hooks.filter(item => item.installed).length, 4);
+    assert.equal(first.hooks.find(item => item.provider === 'cursor').installed, false);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(repo, '.claude', 'settings.local.json'))).theme, 'dark');
+    const codex = JSON.parse(fs.readFileSync(path.join(repo, '.codex', 'hooks.json')));
+    assert.equal(codex.hooks.SessionStart.length, 1);
+    assert.match(codex.hooks.SessionStart[0].hooks[0].command, /capture" "agent/);
+    const copilot = JSON.parse(fs.readFileSync(path.join(repo, '.github', 'copilot', 'settings.local.json')));
+    assert.equal(copilot.hooks.sessionStart.length, 1);
+    const excluded = fs.readFileSync(path.join(repo, '.git', 'info', 'exclude'), 'utf8');
+    assert.match(excluded, /\/\.codex\/hooks\.json/);
+    assert.match(excluded, /\/\.gemini\/settings\.json/);
+    assert.equal(second.hooks.filter(item => item.installed).length, 4);
+  } finally {
+    fs.rmSync(memory, { recursive: true, force: true });
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
 });
 
 test('UserPromptSubmit recovers a missed session start and captures on the next turn', () => {

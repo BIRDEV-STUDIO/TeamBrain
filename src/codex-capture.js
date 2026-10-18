@@ -12,9 +12,11 @@ const { writeEvent } = require('./store');
 const { openIndex, indexEvent } = require('./index');
 const { writeJsonAtomic } = require('./atomic-file');
 
-const TEAM_AUTOMATION_KEY = 'codex-personal-v1';
+const TEAM_AUTOMATION_KEY = 'agent-personal-v1';
+const LEGACY_TEAM_AUTOMATION_KEY = 'codex-personal-v1';
 const TEAM_NAME = 'Kişisel Projeler';
 const CAPTURE_EVENTS = [['SessionStart', 10], ['UserPromptSubmit', 10], ['Stop', 10], ['SessionEnd', 3]];
+const PROVIDERS = new Set(['codex', 'claude', 'gemini', 'copilot', 'cursor', 'other']);
 const IGNORED_DIRECTORIES = new Set(['.git', '.teambrain', '.codex', 'node_modules', 'build', 'dist', 'coverage', '.dart_tool', '.next']);
 
 function safeJson(file, fallback = null) {
@@ -92,8 +94,8 @@ function snapshot(cwd) {
 }
 
 function registryPath(memoryRoot) { return path.join(memoryRoot, '.teambrain', 'codex-projects.json'); }
-function statePath(memoryRoot, sessionId) {
-  const safe = String(sessionId || 'unknown').replace(/[^a-zA-Z0-9-]/g, '-').slice(0, 120);
+function statePath(memoryRoot, provider, sessionId) {
+  const safe = `${provider}-${String(sessionId || 'unknown')}`.replace(/[^a-zA-Z0-9-]/g, '-').slice(0, 120);
   return path.join(memoryRoot, '.teambrain', 'codex-sessions', `${safe}.json`);
 }
 
@@ -111,7 +113,7 @@ function excludeLocalTeam(workspace, teamId) {
 function personalTeam(workspace) {
   let team = workspace.teams().find(item => {
     const record = safeJson(path.join(workspace.teamPath(item.id), 'team.json'), {});
-    return item.local_only && record.automation_key === TEAM_AUTOMATION_KEY;
+    return item.local_only && [TEAM_AUTOMATION_KEY, LEGACY_TEAM_AUTOMATION_KEY].includes(record.automation_key);
   });
   if (team) { excludeLocalTeam(workspace, team.id); return team; }
   team = workspace.createTeam(TEAM_NAME, null, { local_only: true });
@@ -155,8 +157,12 @@ function changes(previous, current) {
   return paths.slice(0, 200);
 }
 
-function eventBody(previous, current, changed) {
-  const lines = ['Codex oturumunda yerel çalışma değişiklikleri algılandı.', '', `Çalışma alanı: ${current.root}`];
+function providerName(provider) {
+  return ({ codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini CLI', copilot: 'GitHub Copilot CLI', cursor: 'Cursor', other: 'AI aracı' })[provider] || provider;
+}
+
+function eventBody(provider, previous, current, changed) {
+  const lines = [`${providerName(provider)} oturumunda yerel çalışma değişiklikleri algılandı.`, '', `Çalışma alanı: ${current.root}`];
   if (current.branch) lines.push(`Dal: ${current.branch}`);
   if (previous?.head !== current.head && current.head) lines.push(`Yeni HEAD: ${current.head.slice(0, 12)}`);
   if (changed.length) {
@@ -167,7 +173,7 @@ function eventBody(previous, current, changed) {
   return lines.join('\n');
 }
 
-function record(memoryRoot, mapping, previous, current) {
+function record(memoryRoot, mapping, provider, previous, current) {
   const changed = changes(previous, current);
   if (previous?.signature === current.signature) return null;
   const projectRoot = mapping.workspace.projectPath(mapping.team_id, mapping.project_id);
@@ -175,9 +181,9 @@ function record(memoryRoot, mapping, previous, current) {
   const count = changed.length;
   const event = createEvent({
     eventType: 'change.recorded',
-    title: `Codex çalışması: ${count ? `${count} dosya değişti` : 'yeni commit'}`,
-    body: eventBody(previous, current, changed),
-    source: 'codex-hook',
+    title: `${providerName(provider)} çalışması: ${count ? `${count} dosya değişti` : 'yeni commit'}`,
+    body: eventBody(provider, previous, current, changed),
+    source: `${provider}-hook`,
     repo: path.basename(current.root),
     branch: current.branch,
     commit: current.head,
@@ -197,25 +203,46 @@ function readHookInput(input) {
   } catch { return {}; }
 }
 
-function captureCodex(options = {}, input) {
-  const payload = readHookInput(input);
+function normalizePayload(provider, payload, options) {
+  const event = payload.hook_event_name || payload.hookEventName || payload.event_name || payload.eventName || options.phase;
+  const aliases = {
+    sessionStart: 'SessionStart', userPromptSubmitted: 'UserPromptSubmit', beforeAgent: 'UserPromptSubmit',
+    agentStop: 'Stop', afterAgent: 'Stop', sessionEnd: 'SessionEnd'
+  };
+  return {
+    ...payload,
+    session_id: payload.session_id || payload.sessionId || payload.conversation_id || payload.conversationId,
+    cwd: payload.cwd || payload.workspace || payload.workspace_path || process.cwd(),
+    hook_event_name: aliases[event] || event || 'Stop',
+    provider
+  };
+}
+
+function captureAgent(options = {}, input) {
+  const provider = String(options.provider || 'codex').toLowerCase();
+  if (!PROVIDERS.has(provider)) throw new Error(`Unsupported AI provider: ${provider}`);
+  const payload = normalizePayload(provider, readHookInput(input), options);
   const memoryRoot = path.resolve(options.root || options['memory-root'] || (process.platform === 'win32' ? 'C:\\TeamBrain-memory' : path.join(os.homedir(), 'teambrain-memory')));
   const cwd = path.resolve(payload.cwd || process.cwd());
   if (!fs.existsSync(memoryRoot) || !fs.existsSync(cwd)) return { captured: false, reason: 'workspace-not-found' };
   const current = snapshot(cwd);
   const mapping = mappedProject(memoryRoot, current.root);
-  const sessionFile = statePath(memoryRoot, payload.session_id);
+  const sessionFile = statePath(memoryRoot, provider, payload.session_id);
   const previous = safeJson(sessionFile, null)?.snapshot || null;
   const eventName = payload.hook_event_name || options.phase || 'Stop';
   let result = null;
-  if (eventName !== 'SessionStart' && previous) result = record(memoryRoot, mapping, previous, current);
+  if (eventName !== 'SessionStart' && previous) result = record(memoryRoot, mapping, provider, previous, current);
   if (eventName === 'SessionEnd') {
     if (fs.existsSync(sessionFile)) fs.rmSync(sessionFile, { force: true });
   } else {
     writeJson(sessionFile, { schema_version: 1, session_id: payload.session_id || null, cwd, updated_at: new Date().toISOString(), snapshot: current });
   }
-  return { captured: Boolean(result), event: result, team_id: mapping.team_id, project_id: mapping.project_id, project_name: mapping.project_name };
+  return { captured: Boolean(result), provider, event: result, team_id: mapping.team_id, project_id: mapping.project_id, project_name: mapping.project_name };
 }
+
+function captureCodex(options = {}, input) { return captureAgent({ ...options, provider: 'codex' }, input); }
+
+function quoteCommand(value) { return `"${String(value).replace(/"/g, '\\"')}"`; }
 
 function installCodexHook(options = {}) {
   const hooksFile = path.resolve(options.file || path.join(os.homedir(), '.codex', 'hooks.json'));
@@ -224,11 +251,14 @@ function installCodexHook(options = {}) {
   const document = safeJson(hooksFile, { hooks: {} });
   document.hooks = document.hooks || {};
   const script = path.join(teambrainRoot, 'bin', 'teambrain.js');
-  const marker = value => value?.hooks?.some(hook => Array.isArray(hook.args) && hook.args.includes('capture') && hook.args.includes('codex'));
+  const marker = value => value?.hooks?.some(hook => {
+    const text = [hook.command, ...(hook.args || [])].filter(Boolean).join(' ');
+    return text.includes('teambrain.js') && (text.includes('capture agent') || (text.includes('capture') && text.includes('codex')));
+  });
+  const command = [process.execPath, '--no-warnings', script, 'capture', 'agent', '--provider', 'codex', '--root', memoryRoot, '--quiet', 'true'].map(quoteCommand).join(' ');
   const handler = timeout => ({
     hooks: [{
-      type: 'command', command: process.execPath,
-      args: ['--no-warnings', script, 'capture', 'codex', '--root', memoryRoot, '--quiet', 'true'],
+      type: 'command', command,
       timeout
     }]
   });
@@ -241,4 +271,4 @@ function installCodexHook(options = {}) {
   return { installed: true, file: hooksFile, memory_root: memoryRoot, events: CAPTURE_EVENTS.map(([event]) => event), trust_required: true };
 }
 
-module.exports = { captureCodex, installCodexHook, snapshot, mappedProject };
+module.exports = { captureAgent, captureCodex, installCodexHook, snapshot, mappedProject, normalizePayload };

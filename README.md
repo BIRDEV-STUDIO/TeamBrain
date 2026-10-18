@@ -72,16 +72,17 @@ tool; custom paths must stay inside the code repository and end in `.md` or `.md
 
 This README is intended to be read by terminal AI agents. An agent must follow these rules before changing a user's machine or connecting GitHub:
 
-1. Explain the difference between the public TeamBrain software repository, the team's private memory repository, and the user's code repository.
-2. Ask for the exact GitHub memory repository URL. Never infer it from a project name, a vague request, or the current code remote.
-3. Show the exact URL back to the user and get explicit confirmation before cloning or writing connection files.
-4. Ask for the local memory directory, the stable TeamBrain actor identity, and whether background synchronization is enabled.
-5. Show the final choices before cloning, installing hooks, or writing `.teambrain/connection.json`.
-6. Run `doctor` and report every failed check.
-7. Never auto-approve Git hooks, AvenoxBeyin hooks, Serena trust, credentials, repository permissions, or external scripts.
-8. Never copy raw conversations, secrets, personal vault data, credentials, or unreviewed personal data into shared memory.
-9. At the start of a coding session, read approved context and check tasks assigned to the current actor.
-10. If the user gives a code repository instead of a memory repository, stop and ask whether `connect project` is intended.
+1. Begin the first installation reply with a short, friendly greeting in the user's language, such as “Merhaba! 👋 TeamBrain kurulumunda sana yardımcı olacağım.” Keep the tone warm and reassuring, and use a few relevant emojis to make the flow easy to scan. Keep repository boundaries, warnings, choices, and confirmations precise; never claim success before verification passes.
+2. Explain the difference between the public TeamBrain software repository, the team's private memory repository, and the user's code repository.
+3. Ask for the exact GitHub memory repository URL. Never infer it from a project name, a vague request, or the current code remote.
+4. Show the exact URL back to the user and get explicit confirmation before cloning or writing connection files.
+5. Ask for the local memory directory, the stable TeamBrain actor identity, and whether background synchronization is enabled.
+6. Show the final choices before cloning, installing hooks, or writing `.teambrain/connection.json`.
+7. Run `doctor` and report every failed check.
+8. Never auto-approve Git hooks, AvenoxBeyin hooks, Serena trust, credentials, repository permissions, or external scripts.
+9. Never copy raw conversations, secrets, personal vault data, credentials, or unreviewed personal data into shared memory.
+10. At the start of a coding session, read approved context and check tasks assigned to the current actor.
+11. If the user gives a code repository instead of a memory repository, stop and ask whether `connect project` is intended.
 
 The actor is a stable GitHub login or TeamBrain identity. Every person uses an individual identity. Never use one shared account, an email address, or a guessed display name.
 
@@ -174,6 +175,24 @@ that computer and are visible in the dashboard. No GitHub repository, hook or sy
 connection is required, and TeamBrain does not upload those records. You can choose
 to connect a separately reviewed private memory repository later if you want team
 sharing.
+
+### Dashboard, greetings and contribution profile
+
+The dashboard keeps the selected team and project visible while placing the most
+common actions, document import and new records, in a consistent header row. The
+overview adds a short greeting and motivational sentence based on the device's
+local time. This greeting can be disabled from the profile and the preference is
+stored only in that browser.
+
+Select the avatar in the upper-right corner to open the full contribution profile.
+It shows project-scoped points, five badges, progress toward the next badge and the
+source records behind earned recognition. The profile is not a time tracker or an
+automatic employee leaderboard. Commits, AI sessions and chat activity never earn
+points on their own; recognition is recalculated from current, source-backed team
+records and explicit peer acknowledgements. Self-awards, duplicate recognition and
+cross-project sources are rejected, and reopening or removing a source removes its
+credit. See [docs/recognition.md](docs/recognition.md) for the scoring, badge and
+storage rules.
 
 ### What is sent automatically
 

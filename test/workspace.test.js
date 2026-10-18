@@ -142,6 +142,8 @@ test('teams can be removed safely and setup guidance is generated', () => {
     assert.doesNotMatch(guide.command, /^node --experimental-sqlite C:\\TeamBrain\\/);
     assert.match(guide.agent_prompt, /yalnızca şu kesin URL'yi kullan: https:\/\/github\.com\/acme\/memory\.git/);
     assert.match(guide.agent_prompt, /tüm son seçimleri kullanıcıya göster ve onaylat/);
+    assert.match(guide.agent_prompt, /Merhaba! 👋 TeamBrain kurulumunda sana yardımcı olacağım/);
+    assert.match(guide.agent_prompt, /doğrulamalar geçmeden başarı ilan etme/);
     assert.throws(() => workspace.deleteTeam(team.id, { confirmation: 'wrong' }), /proje var/);
     assert.equal(workspace.deleteTeam(team.id, { confirmation: team.name }).deleted, true);
     assert.equal(workspace.teams().length, 0);

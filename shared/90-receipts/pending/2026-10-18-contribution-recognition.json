@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "receipt_id": "2026-10-18-contribution-recognition",
+  "project_id": "teambrain",
+  "status": "pending",
+  "privacy_review": true,
+  "summary": "Added local-time greetings and a project-scoped contribution profile with peer acknowledgements, points, five evidence-backed badges and persistent greeting preference. Source changes, task reopening, duplicate acknowledgements, self-awards and cross-project sources are covered by tests. The full 73-test suite passed; after final source-isolation hardening, all eight recognition tests and the Edge browser integration check passed. Light, dark and mobile screenshots were inspected. Changes remain uncommitted.",
+  "sources": [
+    "file:src/recognition.js",
+    "file:src/dashboard-server.js",
+    "file:public/recognition.js",
+    "file:public/recognition.css",
+    "file:public/app.js",
+    "file:public/index.html",
+    "file:test/recognition.test.js",
+    "file:test/recognition-browser.cjs",
+    "file:docs/recognition.md"
+  ]
+}

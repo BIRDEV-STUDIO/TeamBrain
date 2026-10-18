@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "receipt_id": "2026-10-19-overview-header-flow",
+  "project_id": "teambrain",
+  "status": "pending",
+  "privacy_review": true,
+  "summary": "Simplified the dashboard overview header by removing the project title and repeated description from the overview, placing the date in the utility bar and removing the sparkle emoji from the evening greeting. The greeting now shares one balanced row with Belge yükle and Yeni kayıt; their vertical centers match and the greeting stays on one line at the inspected width. Focused UI tests and JavaScript syntax checks passed; the live browser reported no console errors. Changes remain uncommitted.",
+  "sources": [
+    "file:public/index.html",
+    "file:public/app.js",
+    "file:public/recognition.js",
+    "file:public/recognition.css",
+    "file:test/project-navigation-ui.test.js"
+  ]
+}

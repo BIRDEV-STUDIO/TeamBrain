@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "receipt_id": "2026-10-18-dashboard-profile-visual-refresh",
+  "project_id": "teambrain",
+  "status": "pending",
+  "privacy_review": true,
+  "summary": "Refined the local dashboard with the public site's warm paper palette, light sidebar, dark utility bar, restrained lime/coral/blue accents, roomier typography and line-based overview sections. The avatar now opens a full main-content profile view rather than a side dialog; no profile navigation item or manual acknowledgement form is present. All 74 project tests passed, and the Edge browser flow passed for full-page profile navigation, source escaping, saved greeting preference, dark theme and mobile layout. Desktop and mobile screenshots were inspected. Changes remain uncommitted.",
+  "sources": [
+    "file:public/recognition.css",
+    "file:public/recognition.js",
+    "file:public/app.js",
+    "file:public/index.html",
+    "file:test/recognition-browser.cjs",
+    "file:docs/recognition.md"
+  ]
+}

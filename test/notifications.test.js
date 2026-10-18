@@ -56,6 +56,8 @@ test('setup guide builds a safe client fallback when an older dashboard omits ag
     project: { name: 'Robot' },
     command: 'teambrain setup --repo C:\\code'
   });
+  assert.match(prompt, /Merhaba! 👋 TeamBrain kurulumunda sana yardımcı olacağım/);
+  assert.match(prompt, /doğrulamalar geçmeden başarı ilan etme/);
   assert.match(prompt, /yalnızca şu kesin URL'yi kullan: https:\/\/github\.com\/acme\/memory\.git/);
   assert.match(prompt, /tüm son seçimleri kullanıcıya göster ve onaylat/);
   assert.match(prompt, /teambrain setup --repo/);

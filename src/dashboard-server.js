@@ -5,6 +5,7 @@ const path = require('node:path');
 const { Workspace } = require('./workspace');
 const { SyncWorker } = require('./sync-worker');
 const { UpdateService } = require('./updater');
+const recognition = require('./recognition');
 const assets = { '/': ['index.html', 'text/html'], '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/app.css': ['app.css', 'text/css'], '/projects.css': ['projects.css', 'text/css'], '/notifications.css': ['notifications.css', 'text/css'], '/tree.css': ['tree.css', 'text/css'], '/vault.css': ['vault.css', 'text/css'], '/notifications.js': ['notifications.js', 'text/javascript'], '/tree-model.js': ['tree-model.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'] };
 
 function guard(req) {
@@ -41,6 +42,10 @@ function createDashboardServer(root, options = {}) {
     try { guard(req); } catch (error) { send(403, { error: error.message }); return; }
     try {
       const url = new URL(req.url, 'http://localhost');
+      if (req.method === 'GET' && ['/recognition.js', '/recognition.css'].includes(url.pathname)) {
+        res.writeHead(200, { 'Content-Type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/css; charset=utf-8' });
+        res.end(fs.readFileSync(path.join(__dirname, '..', 'public', url.pathname.slice(1)))); return;
+      }
       if (req.method === 'GET' && assets[url.pathname]) {
         const [file, type] = assets[url.pathname];
         res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8` });
@@ -75,6 +80,10 @@ function createDashboardServer(root, options = {}) {
       if (parts[0] === 'api' && parts[1] === 'teams' && parts[3] === 'projects' && parts[5] === 'documents' && req.method === 'POST') { send(201, await withSync(workspace.importDocument(parts[2], parts[4], await multipartBody(req)))); return; }
       if (parts[0] === 'api' && parts[1] === 'teams' && parts[3] === 'projects') {
         const team = parts[2], project = parts[4], operation = parts[5];
+        if (project && operation === 'recognition' && parts.length === 6) {
+          if (req.method === 'GET') { send(200, recognition.snapshot(workspace, team, project)); return; }
+          if (req.method === 'POST') { send(201, await withSync(recognition.acknowledge(workspace, team, project, await jsonBody(req)))); return; }
+        }
         if (!project && req.method === 'POST') { send(201, await withSync(workspace.createProject(team, (await jsonBody(req)).name))); return; }
         if (project && !operation && req.method === 'GET') { send(200, workspace.snapshot(team, project)); return; }
         if (project && operation === 'events' && req.method === 'POST') { send(201, await withSync(workspace.addEvent(team, project, await jsonBody(req)))); return; }

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "receipt_id": "2026-10-18-warm-green-dashboard-balance",
+  "project_id": "teambrain",
+  "status": "pending",
+  "privacy_review": true,
+  "summary": "Restored TeamBrain's warm dark-green sidebar, soft green hero, green primary actions and badge accents while retaining the roomier overview and full-page profile. Removed the dark top-bar overrides so the original notification button, counter and light utility bar styling are used again. The Edge browser flow passed in desktop, dark and mobile modes, and screenshots were inspected. Changes remain uncommitted.",
+  "sources": [
+    "file:public/recognition.css",
+    "file:public/notifications.css",
+    "file:test/recognition-browser.cjs"
+  ]
+}

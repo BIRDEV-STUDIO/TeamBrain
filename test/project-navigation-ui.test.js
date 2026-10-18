@@ -8,7 +8,11 @@ const path = require('node:path');
 test('project heading opens a dedicated project browser with selectable project cards', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.css'), 'utf8');
   assert.match(html, /id="browse-projects"/);
+  assert.match(html, /id="add-project"/);
+  assert.match(css, /@media\(max-height:760px\) and \(min-width:701px\)/);
+  assert.match(css, /\.sidebar\{[^}]*overflow-y:auto/);
   assert.match(app, /function renderProjects\(\)/);
   assert.match(app, /data-project-open/);
   assert.match(app, /state\.view = 'projects'/);
@@ -62,6 +66,9 @@ test('connections view exposes visible manual and automatic application updates'
   assert.match(app, /data-update-apply/);
   assert.match(app, /data-update-auto/);
   assert.match(app, /api\/update\/restart/);
+  assert.match(app, /class="update-overview"/);
+  assert.match(app, /class="update-status"/);
   assert.match(css, /\.update-notice\.attention/);
   assert.match(css, /\.update-panel\.installed/);
+  assert.match(css, /\.update-symbol/);
 });
